@@ -1,5 +1,8 @@
 package com.zenith.browser.core
 
+import android.content.ComponentName
+import android.content.Intent
+import android.provider.Settings
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -82,4 +85,26 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun hostOf(url: String, promise: Promise) =
         guard(promise, null as String?) { ZenithCoreJNI.hostOf(url) }
+
+    /**
+     * Buka layar Pengaturan DNS Privat Android (DoT) — untuk mengaktifkan
+     * DNS terenkripsi (mis. dns.adguard.com) tanpa VPN.
+     */
+    @ReactMethod
+    fun openPrivateDnsSettings(promise: Promise) {
+        val ctx = reactApplicationContext
+        fun tryStart(intent: Intent): Boolean = try {
+            ctx.startActivity(intent)
+            true
+        } catch (_: Throwable) {
+            false
+        }
+        val opened = tryStart(
+            Intent().setComponent(
+                ComponentName("com.android.settings", "com.android.settings.Settings\$PrivateDnsSettingActivity"),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        ) || tryStart(Intent(Settings.ACTION_WIRELESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) ||
+            tryStart(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        promise.resolve(opened)
+    }
 }

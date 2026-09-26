@@ -33,6 +33,7 @@ interface ZenithCoreNative {
   normalizeInput(input: string, searchTemplate: string): Promise<string | null>;
   expandSearch(template: string, query: string): Promise<string | null>;
   hostOf(url: string): Promise<string | null>;
+  openPrivateDnsSettings(): Promise<boolean>;
 }
 
 const ZC = NativeModules.ZenithCore as ZenithCoreNative | undefined;
@@ -250,6 +251,14 @@ export async function hostOf(url: string): Promise<string> {
     }
   }
   return hostOfTs(url);
+}
+
+export async function openPrivateDnsSettings(): Promise<boolean> {
+  try {
+    return (await ZC?.openPrivateDnsSettings()) ?? false;
+  } catch {
+    return false;
+  }
 }
 
 export async function coreVersion(): Promise<{ version: string; engine: string } | null> {

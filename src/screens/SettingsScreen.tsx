@@ -6,6 +6,19 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
+
+function doohLabel(st: 'idle' | 'testing' | 'ok' | 'fail'): string {
+  if (st === 'testing') {
+    return 'Menguji DoH…';
+  }
+  if (st === 'ok') {
+    return 'DoH terjangkau — DNS terenkripsi bisa dipakai';
+  }
+  if (st === 'fail') {
+    return 'DoH terblokir/tak terjangkau dari jaringan ini';
+  }
+  return 'Uji DNS-over-HTTPS';
+}
 import { useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
@@ -18,7 +31,7 @@ import {
   TextField,
   ToggleRow,
 } from '../ui/kit';
-import { adblockInit, adblockResetStats, adblockStats, type AdblockStats } from '../core/native';
+import { adblockInit, adblockResetStats, adblockStats, openPrivateDnsSettings, type AdblockStats } from '../core/native';
 import { uid } from '../state/defaults';
 import type { SearchEngine } from '../types';
 
@@ -33,6 +46,24 @@ export function SettingsScreen() {
   const [listUrl, setListUrl] = useState('');
   const [listMode, setListMode] = useState<'replace' | 'merge'>('replace');
   const [importing, setImporting] = useState(false);
+  const [dohState, setDohState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+
+  const testDoh = async () => {
+    setDohState('testing');
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch('https://1.1.1.1/dns-query?name=example.com&type=A', {
+        headers: { Accept: 'application/dns-json' },
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      const data = await res.json();
+      setDohState(res.ok && data?.Answer ? 'ok' : 'fail');
+    } catch {
+      setDohState('fail');
+    }
+  };
 
   const refreshStats = useCallback(async () => {
     setStats(await adblockStats());

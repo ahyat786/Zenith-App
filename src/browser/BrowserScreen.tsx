@@ -87,7 +87,7 @@ export function BrowserScreen() {
   }, []);
   useEffect(() => {
     refreshStats();
-    const t = setInterval(refreshStats, 4000);
+    const t = setInterval(refreshStats, 1000);
     return () => clearInterval(t);
   }, [refreshStats, activeTab?.url]);
 
@@ -340,8 +340,7 @@ export function BrowserScreen() {
 
       {/* PILL alamat */}
       <Pressable
-        onPress={openOmniboxEdit}
-        disabled={!activeTab}
+        onPress={activeTab ? openOmniboxEdit : () => openOmniboxNew()}
         style={({ pressed }) => ({
           flex: 1,
           flexDirection: 'row',

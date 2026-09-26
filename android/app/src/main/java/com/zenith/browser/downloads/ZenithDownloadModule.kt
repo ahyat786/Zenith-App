@@ -1,8 +1,11 @@
 package com.zenith.browser.downloads
 
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import com.facebook.react.bridge.Promise
@@ -22,11 +25,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Unduhan cepat ala Via: multi-thread (4 koneksi + Range request paralel).
+ * Unduhan cepat multi-thread (4 koneksi + Range paralel).
  *
- * - Tidak butuh izin penyimpanan (folder eksternal milik aplikasi).
- * - Progres/kecepatan dikirim ke JS lewat event "ZenithDownloadProgress".
- * - Bila "fast" dimatikan dari pengaturan → fallback ke DownloadManager sistem.
+ * Tujuan penyimpanan:
+ *  - Android 10+ (API 29): folder Download/Zenith PUBLIK via MediaStore
+ *    (tanpa izin apa pun — terlihat di aplikasi File / galeri unduhan).
+ *  - Android 7–9: folder milik aplikasi (fallback), dibuka via FileProvider.
  */
 class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -40,7 +44,8 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     class Job(
         val id: String,
         val url: String,
-        val file: File,
+        val uri: Uri?, // target MediaStore (API 29+)
+        val file: File?, // target legacy (fallback)
         val mime: String,
         val threads: Int,
     ) {
@@ -51,6 +56,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         @Volatile var status: String = "connecting"
         @Volatile var error: String? = null
         @Volatile var lastDone: Long = 0
+        val displayName: String get() = file?.name ?: uri?.lastPathSegment ?: "unduhan"
     }
 
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -95,15 +101,13 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun open(id: String, promise: Promise) {
         val job = jobs[id]
-        if (job == null || !job.file.exists()) {
+        if (job == null || !existsTarget(job)) {
             promise.resolve(false)
             return
         }
         try {
-            val uri = FileProvider.getUriForFile(
-                reactApplicationContext, "${reactApplicationContext.packageName}.zenithprovider", job.file)
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, job.mime.ifBlank { "*/*" })
+                setDataAndType(targetUri(job), job.mime.ifBlank { "*/*" })
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             reactApplicationContext.startActivity(intent)
@@ -116,19 +120,19 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun share(id: String, promise: Promise) {
         val job = jobs[id]
-        if (job == null || !job.file.exists()) {
+        if (job == null || !existsTarget(job)) {
             promise.resolve(false)
             return
         }
         try {
-            val uri = FileProvider.getUriForFile(
-                reactApplicationContext, "${reactApplicationContext.packageName}.zenithprovider", job.file)
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = job.mime.ifBlank { "*/*" }
-                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_STREAM, targetUri(job))
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            reactApplicationContext.startActivity(Intent.createChooser(intent, job.file.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            reactApplicationContext.startActivity(
+                Intent.createChooser(intent, job.displayName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
             promise.resolve(true)
         } catch (t: Throwable) {
             promise.reject("ZENITH_DL_SHARE", t.message ?: t.toString(), t)
@@ -139,7 +143,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     fun remove(id: String, promise: Promise) {
         jobs[id]?.let { job ->
             job.cancel.set(true)
-            job.file.delete()
+            deleteTarget(job)
             jobs.remove(id)
         }
         promise.resolve(true)
@@ -158,6 +162,89 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun removeListeners(count: Int) { /* wajib ada utk NativeEventEmitter */ }
 
+    // ------------------------------------------------------------ target
+
+    private fun legacyFile(name: String): File {
+        val dir = File(
+            reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                ?: reactApplicationContext.filesDir,
+            "Zenith",
+        ).apply { mkdirs() }
+        var f = File(dir, name)
+        var i = 1
+        val base = f.nameWithoutExtension
+        val ext = f.extension
+        while (f.exists()) {
+            f = File(dir, if (ext.isBlank()) "${base} ($i)" else "${base} ($i).$ext")
+            i++
+        }
+        return f
+    }
+
+    private fun createTarget(name: String, mime: String): Pair<Uri?, File?> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Zenith")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = reactApplicationContext.contentResolver
+                    .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    return uri to null
+                }
+            } catch (_: Throwable) {
+                // jatuh ke legacy
+            }
+        }
+        return null to legacyFile(name)
+    }
+
+    private fun targetUri(job: Job): Uri =
+        job.uri ?: FileProvider.getUriForFile(
+            reactApplicationContext,
+            "${reactApplicationContext.packageName}.zenithprovider",
+            job.file!!,
+        )
+
+    private fun existsTarget(job: Job): Boolean =
+        if (job.uri != null) true else (job.file?.exists() == true)
+
+    private fun deleteTarget(job: Job) {
+        job.uri?.let { uri ->
+            try {
+                reactApplicationContext.contentResolver.delete(uri, null, null)
+            } catch (_: Throwable) {
+            }
+        } ?: run {
+            job.file?.delete()
+        }
+    }
+
+    private fun finishTarget(job: Job) {
+        job.uri?.let { uri ->
+            try {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                reactApplicationContext.contentResolver.update(uri, values, null, null)
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    /** Buka target sebagai berkas akses acak (mendukung seek utk multi-thread). */
+    private fun openRaf(job: Job): RandomAccessFile {
+        job.uri?.let { uri ->
+            val pfd = reactApplicationContext.contentResolver.openFileDescriptor(uri, "rw")
+                ?: throw IOException("tidak dapat membuka target unduhan")
+            return RandomAccessFile(pfd.fileDescriptor, "rw")
+        }
+        return RandomAccessFile(job.file!!, "rw")
+    }
+
     // ------------------------------------------------------------ inti
 
     fun enqueue(url: String, filenameIn: String?, mime: String?, connections: Int): String {
@@ -165,24 +252,12 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         if (name.isEmpty()) {
             name = "unduhan"
         }
-        val dir = File(
-            reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                ?: reactApplicationContext.filesDir,
-            "Zenith",
-        ).apply { mkdirs() }
-        var file = File(dir, name)
-        var n = 1
-        val base = file.nameWithoutExtension
-        val ext = file.extension
-        while (file.exists()) {
-            file = File(dir, if (ext.isBlank()) "${base} (${n})" else "${base} (${n}).$ext")
-            n++
-        }
-        val id = System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
         val guessedMime = mime?.takeIf { it.isNotBlank() }
-            ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension)
+            ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(File(name).extension)
             ?: "application/octet-stream"
-        val job = Job(id, url, file, guessedMime, connections.coerceIn(1, 8))
+        val (uri, file) = createTarget(name, guessedMime)
+        val id = System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
+        val job = Job(id, url, uri, file, guessedMime, connections.coerceIn(1, 8))
         jobs[id] = job
         emit(job)
         pool.execute { runJob(job) }
@@ -194,7 +269,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         conn.connectTimeout = 15000
         conn.readTimeout = 20000
         conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "ZenithBrowser/0.2 Mozilla/5.0 (Linux; Android)")
+        conn.setRequestProperty("User-Agent", "ZenithBrowser/0.3 Mozilla/5.0 (Linux; Android)")
         if (rangeTo >= 0) {
             conn.setRequestProperty("Range", "bytes=$rangeFrom-$rangeTo")
         } else if (rangeFrom > 0) {
@@ -205,7 +280,6 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
 
     private fun runJob(job: Job) {
         try {
-            // probe: HEAD-like via Range 0-0 untuk deteksi dukungan range + ukuran
             val probe = openConn(job.url, 0, 0)
             val probeCode = probe.responseCode
             val contentRange = probe.getHeaderField("Content-Range") // bytes 0-0/TOTAL
@@ -225,7 +299,6 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
             emit(job)
 
             if (total > 4 * 1048576 && probeCode == 206) {
-                // multi-thread: bagi menjadi N bagian
                 val n = job.threads
                 val slice = total / n
                 val workers = (0 until n).map { i ->
@@ -236,25 +309,29 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                 workers.forEach { it.start() }
                 workers.forEach { it.join() }
             } else {
-                // satu aliran (ukuran kecil / server tanpa Range)
                 downloadPart(job, 0, if (total > 0) total - 1 else -1)
             }
 
             if (job.cancel.get()) {
                 job.status = "canceled"
-                job.file.delete()
+                deleteTarget(job)
             } else if (job.total > 0 && job.done.get() < job.total) {
                 job.status = "error"
                 job.error = "unduhan tidak lengkap"
+                deleteTarget(job)
             } else {
                 job.status = "done"
                 job.speed = 0
+                finishTarget(job)
             }
             emit(job)
         } catch (t: Throwable) {
             job.status = if (job.cancel.get()) "canceled" else "error"
             if (job.error == null) {
                 job.error = t.message ?: t.toString()
+            }
+            if (job.status == "error") {
+                deleteTarget(job)
             }
             emit(job)
         }
@@ -271,7 +348,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                 if (code !in 200..299) {
                     throw IOException("HTTP $code")
                 }
-                RandomAccessFile(job.file, "rw").use { raf ->
+                openRaf(job).use { raf ->
                     raf.seek(pos)
                     val buf = ByteArray(64 * 1024)
                     val input = conn.inputStream
@@ -285,13 +362,13 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                         pos += read
                     }
                 }
-                return // bagian selesai
+                return
             } catch (t: Throwable) {
                 attempt++
                 if (attempt >= PART_RETRIES) {
                     if (!job.cancel.get()) {
                         job.error = t.message ?: t.toString()
-                        job.cancel.set(true) // hentikan pekerja lain
+                        job.cancel.set(true)
                     }
                     return
                 }
@@ -307,18 +384,13 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     }
 
     private fun reportAll() {
-        var active = false
         for (job in jobs.values) {
             if (job.status == "downloading" || job.status == "connecting") {
-                active = true
                 val d = job.done.get()
                 job.speed = ((d - job.lastDone) * 1000) / 600
                 job.lastDone = d
                 emit(job)
             }
-        }
-        if (!active) {
-            // tidak ada yang aktif — tidak perlu emit
         }
     }
 
@@ -326,8 +398,8 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         val m = com.facebook.react.bridge.Arguments.createMap()
         m.putString("id", job.id)
         m.putString("url", job.url)
-        m.putString("filename", job.file.name)
-        m.putString("path", job.file.absolutePath)
+        m.putString("filename", job.displayName)
+        m.putString("path", job.uri?.toString() ?: job.file?.absolutePath ?: "")
         m.putDouble("total", job.total.toDouble())
         m.putDouble("done", job.done.get().toDouble())
         m.putDouble("speed", job.speed.toDouble())
@@ -342,7 +414,6 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                 .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
                 .emit(EVENT, jobToMap(job))
         } catch (_: Throwable) {
-            // konteks mungkin sudah mati
         }
     }
 

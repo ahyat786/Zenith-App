@@ -225,8 +225,9 @@ export function DownloadsScreen() {
 
       <View style={{ padding: spacing.lg }}>
         <Text style={{ color: theme.subtext, fontSize: 12, lineHeight: 18 }}>
-          Unduhan disimpan di penyimpanan aplikasi (Android/data/com.zenith.browser/files/Zenith)
-          dan dibuka lewat sistem — privasi terjaga tanpa izin penyimpanan tambahan.
+          Unduhan tersimpan di folder Download/Zenith — satu folder yang sama dengan
+          unduhan Android lainnya, terlihat di aplikasi File tanpa izin tambahan
+          (Android 10+). Android 9 dan lebih lama memakai penyimpanan aplikasi.
         </Text>
       </View>
     </ScreenShell>
