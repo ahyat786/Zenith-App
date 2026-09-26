@@ -122,14 +122,10 @@ dependencies {
 // Zenith: build inti Rust (libzenith_core.so) sebelum kompilasi Android.
 // Lewati dengan: ./gradlew assembleRelease -Pzenith.skipRust=1
 // ================================================================
-task buildRustCore {
-    doLast {
-        exec {
-            workingDir rootProject.file("../rust")
-            environment "ZENITH_SKIP_RUST", project.hasProperty("zenith.skipRust") ? "1" : "0"
-            commandLine "bash", "./build-android.sh"
-        }
-    }
+tasks.register("buildRustCore", Exec) {
+    workingDir rootProject.file("../rust")
+    environment "ZENITH_SKIP_RUST", project.hasProperty("zenith.skipRust") ? "1" : "0"
+    commandLine "bash", "./build-android.sh"
 }
 if (!project.hasProperty("zenith.skipRust")) {
     tasks.named("preBuild") { dependsOn("buildRustCore") }
