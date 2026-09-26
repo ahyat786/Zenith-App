@@ -128,7 +128,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            reactApplicationContext.startActivity(Intent.createChooser(intent, job.filename ?: job.file.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            reactApplicationContext.startActivity(Intent.createChooser(intent, job.file.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             promise.resolve(true)
         } catch (t: Throwable) {
             promise.reject("ZENITH_DL_SHARE", t.message ?: t.toString(), t)
