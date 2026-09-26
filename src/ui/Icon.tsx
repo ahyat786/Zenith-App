@@ -7,7 +7,7 @@ export type IconName =
   | 'puzzle' | 'search' | 'star' | 'starFilled' | 'more' | 'chevronRight'
   | 'chevronDown' | 'trash' | 'pencil' | 'refresh' | 'globe' | 'zap'
   | 'share' | 'check' | 'expand' | 'clock' | 'info' | 'download' | 'folder'
-  | 'bookmark' | 'arrowUp' | 'arrowDown' | 'warning';
+  | 'bookmark' | 'arrowUp' | 'arrowDown' | 'warning' | 'monitor' | 'phone';
 
 interface Props {
   name: IconName;
@@ -69,6 +69,8 @@ export function Icon({ name, size = 22, color = '#fff', strokeWidth = 2 }: Props
       case 'arrowUp': return P('M12 19V5M6 11l6-6 6 6');
       case 'arrowDown': return P('M12 5v14M6 13l6 6 6-6');
       case 'warning': return <G>{P('M12 3.5L22 20H2L12 3.5z')}{P('M12 9.5v4.5M12 17.2h.01')}</G>;
+      case 'monitor': return <G>{P('M3 5h18v11H3z')}{P('M9 20h6M12 16v4')}</G>;
+      case 'phone': return <G>{P('M7.5 3.5h9v17h-9z')}{P('M10.5 18.5h3')}</G>;
       default: return null;
     }
   })();

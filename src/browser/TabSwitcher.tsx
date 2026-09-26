@@ -6,7 +6,7 @@
  * - Tab switcher memakai <Modal> sehingga selalu tampil di atas WebView.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -29,6 +29,18 @@ import { ActionSheet, Button, TextField, type SheetAction } from '../ui/kit';
 
 const GROUP_COLORS = ['#8b7cf6', '#60a5fa', '#4ade80', '#fbbf24', '#f472b6', '#f87171'];
 
+/** Warna stabil per-host untuk ubin "favicon" huruf (Chrome-style). */
+const HOST_COLORS = ['#8b7cf6', '#60a5fa', '#4ade80', '#fbbf24', '#f472b6', '#f87171', '#2dd4bf', '#fb923c'];
+function hostColor(host: string): string {
+  let h = 0;
+  for (let i = 0; i < host.length; i++) {
+    h = (h * 31 + host.charCodeAt(i)) >>> 0;
+  }
+  return HOST_COLORS[h % HOST_COLORS.length];
+}
+
+const STALE_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari
+
 export function TabSwitcher({ theme }: { theme: Theme }) {
   const { state, dispatch, activeTab } = useStore();
   const [ctxTab, setCtxTab] = useState<string | null>(null);
@@ -40,6 +52,18 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
   const [manageWs, setManageWs] = useState(false);
   const [newWsName, setNewWsName] = useState('');
   const insets = useSafeAreaInsets();
+  // Chrome-style: telusuri tab + item tidak aktif + urungkan tutup tab
+  const [query, setQuery] = useState('');
+  const [showInactive, setShowInactive] = useState(false);
+  const [undo, setUndo] = useState<Tab | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (undoTimer.current) {
+        clearTimeout(undoTimer.current);
+      }
+    };
+  }, []);
 
   const open = state.ui.tabSwitcher;
   const close = () => dispatch({ type: 'SET_UI', patch: { tabSwitcher: false } });
@@ -55,6 +79,33 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
     dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: t.workspaceId });
     dispatch({ type: 'SET_ACTIVE_TAB', id: t.id });
     close();
+  };
+
+  // ---------- tutup + urungkan (Chrome-style) ----------
+  const closeTab = (t: Tab) => {
+    dispatch({ type: 'CLOSE_TAB', id: t.id });
+    setUndo(t);
+    if (undoTimer.current) {
+      clearTimeout(undoTimer.current);
+    }
+    undoTimer.current = setTimeout(() => setUndo(null), 5000);
+  };
+  const restoreTab = () => {
+    if (!undo) {
+      return;
+    }
+    dispatch({
+      type: 'ADD_TAB',
+      id: undo.id,
+      url: undo.url,
+      incognito: undo.incognito,
+      workspaceId: undo.workspaceId,
+    });
+    if (undo.groupId) {
+      dispatch({ type: 'SET_TAB_GROUP', tabId: undo.id, groupId: undo.groupId });
+    }
+    dispatch({ type: 'SET_ACTIVE_TAB', id: undo.id });
+    setUndo(null);
   };
 
   // ---------- menu konteks TAB ----------
@@ -110,7 +161,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
         icon: 'close',
         onPress: () => dispatch({ type: 'CLOSE_OTHER_TABS', keepId: ctxTabObj.id }),
       },
-      { label: 'Tutup tab ini', icon: 'trash', danger: true, onPress: () => dispatch({ type: 'CLOSE_TAB', id: ctxTabObj.id }) },
+      { label: 'Tutup tab ini', icon: 'trash', danger: true, onPress: () => ctxTabObj && closeTab(ctxTabObj) },
     );
     return actions;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,6 +230,21 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
   const ungrouped = tabs.filter((t) => !t.groupId);
   const tabsInGroup = (gid: string) => tabs.filter((t) => t.groupId === gid);
 
+  // ---------- telusuri tab (Chrome-style: cari di semua workspace) ----------
+  const q = query.trim().toLowerCase();
+  const searching = q.length > 0;
+  const results = searching
+    ? state.tabs.filter(
+        (t) => t.url.toLowerCase().includes(q) || (t.title || '').toLowerCase().includes(q),
+      )
+    : [];
+
+  // ---------- item tidak aktif (Chrome declutter: 7+ hari belum dipakai) ----------
+  const now = Date.now();
+  const isStale = (t: Tab) => !!t.lastActiveAt && now - t.lastActiveAt > STALE_MS && t.id !== state.activeTabId;
+  const staleUngrouped = ungrouped.filter(isStale);
+  const freshUngrouped = ungrouped.filter((t) => !isStale(t));
+
   return (
     <Modal visible animationType="slide" onRequestClose={close} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
@@ -186,12 +252,20 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
         <View style={{ paddingHorizontal: spacing.md, paddingBottom: 4 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={{ color: theme.text, fontSize: 20, fontWeight: '800', flex: 1 }}>
-              Tab <Text style={{ color: theme.accent }}>{tabs.length}</Text>
-              {groups.length > 0 ? (
-                <Text style={{ color: theme.subtext, fontSize: 13, fontWeight: '600' }}>
-                  {'  '}• {groups.length} grup
+              {searching ? (
+                <Text style={{ color: theme.subtext, fontSize: 16 }}>
+                  Hasil <Text style={{ color: theme.accent }}>{results.length}</Text>
                 </Text>
-              ) : null}
+              ) : (
+                <>
+                  Tab <Text style={{ color: theme.accent }}>{tabs.length}</Text>
+                  {groups.length > 0 ? (
+                    <Text style={{ color: theme.subtext, fontSize: 13, fontWeight: '600' }}>
+                      {'  '}• {groups.length} grup
+                    </Text>
+                  ) : null}
+                </>
+              )}
             </Text>
             <Pressable
               onPress={() => setNewGroupOpen(true)}
@@ -225,7 +299,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
 
           {/* chip workspace */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
-            {state.workspaces.map((ws) => {
+            {searching ? null : state.workspaces.map((ws) => {
               const active = ws.id === state.activeWorkspaceId;
               const count = state.tabs.filter((t) => t.workspaceId === ws.id).length;
               return (
@@ -266,9 +340,73 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
               );
             })}
           </ScrollView>
+
+          {/* Telusuri tab Anda (Chrome/Kiwi-style) */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: theme.surface2,
+              borderRadius: radius.pill,
+              paddingHorizontal: 12,
+              marginTop: 8,
+              marginBottom: 2,
+            }}>
+            <Icon name="search" size={16} color={theme.subtext} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Telusuri tab Anda…"
+              placeholderTextColor={theme.subtext}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              style={{ flex: 1, color: theme.text, fontSize: 14.5, paddingVertical: 9, paddingHorizontal: 8 }}
+            />
+            {query.length > 0 ? (
+              <Pressable hitSlop={10} onPress={() => setQuery('')} style={{ padding: 4 }}>
+                <Icon name="close" size={15} color={theme.subtext} />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 24 }}>
+          {searching ? (
+            <View>
+              {results.length === 0 ? (
+                <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+                  <Icon name="search" size={30} color={theme.subtext} />
+                  <Text style={{ color: theme.text, fontSize: 15, fontWeight: '700', marginTop: 10 }}>
+                    Tidak ada tab yang cocok
+                  </Text>
+                  <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 3 }}>
+                    Coba kata kunci lain dari judul atau alamat tab.
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+                  {results.map((t) => {
+                    const g = groups.find((x) => x.id === t.groupId);
+                    return (
+                      <TabCard
+                        key={t.id}
+                        tab={t}
+                        theme={theme}
+                        active={t.id === state.activeTabId}
+                        onSelect={() => selectTab(t)}
+                        onContext={() => setCtxTab(t.id)}
+                        onClose={() => closeTab(t)}
+                        groupName={g?.name}
+                        groupColor={g?.color}
+                      />
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          ) : (
+            <>
           {showAll ? (
             <Text style={{ color: theme.warn, fontSize: 12.5, marginBottom: 10 }}>
               Workspace ini kosong — menampilkan semua tab.
@@ -283,7 +421,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
               <View
                 key={g.id}
                 style={{
-                  backgroundColor: theme.surface,
+                  backgroundColor: expanded ? g.color + '12' : theme.surface,
                   borderRadius: radius.md,
                   borderWidth: 1,
                   borderColor: expanded ? g.color : theme.border,
@@ -315,27 +453,46 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                       {gTabs.length} tab
                     </Text>
                   </View>
-                  {/* pratinjau huruf pertama 3 tab */}
-                  <View style={{ flexDirection: 'row', marginRight: 8 }}>
-                    {gTabs.slice(0, 3).map((t, i) => (
+                  {/* pratinjau Chrome-style: 2 tab pertama + chip +N */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+                    {gTabs.slice(0, 2).map((t, i) => {
+                      const h = hostOfUrl(t.url) || '?';
+                      return (
+                        <View
+                          key={t.id}
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 8,
+                            backgroundColor: hostColor(h) + '2e',
+                            borderWidth: 1,
+                            borderColor: theme.border,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginLeft: i === 0 ? 0 : -7,
+                          }}>
+                          <Text style={{ color: hostColor(h), fontSize: 11, fontWeight: '800' }}>
+                            {h.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                    {gTabs.length > 2 ? (
                       <View
-                        key={t.id}
                         style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: 6,
-                          backgroundColor: theme.surface2,
-                          borderWidth: 1,
-                          borderColor: theme.border,
+                          marginLeft: -7,
+                          width: 26,
+                          height: 26,
+                          borderRadius: 8,
+                          backgroundColor: g.color,
                           alignItems: 'center',
                           justifyContent: 'center',
-                          marginLeft: i === 0 ? 0 : -6,
                         }}>
-                        <Text style={{ color: theme.subtext, fontSize: 10.5, fontWeight: '800' }}>
-                          {(hostOfUrl(t.url) || '?').charAt(0).toUpperCase()}
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>
+                          +{gTabs.length - 2}
                         </Text>
                       </View>
-                    ))}
+                    ) : null}
                   </View>
                   <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={17} color={theme.subtext} />
                 </Pressable>
@@ -357,7 +514,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                             groupColor={g.color}
                             onSelect={() => selectTab(t)}
                             onContext={() => setCtxTab(t.id)}
-                            onClose={() => dispatch({ type: 'CLOSE_TAB', id: t.id })}
+                            onClose={() => closeTab(t)}
                           />
                         ))}
                       </View>
@@ -395,7 +552,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
           })}
 
           {/* ================= tab tanpa grup ================= */}
-          {ungrouped.length > 0 || groups.length === 0 ? (
+          {freshUngrouped.length > 0 || (groups.length === 0 && tabs.length > 0) ? (
             <Text
               style={{
                 color: theme.subtext,
@@ -427,9 +584,9 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                 Tekan “Tab baru” di bawah untuk mulai menjelajah.
               </Text>
             </View>
-          ) : (
+          ) : freshUngrouped.length > 0 ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-              {ungrouped.map((t) => (
+              {freshUngrouped.map((t) => (
                 <TabCard
                   key={t.id}
                   tab={t}
@@ -437,12 +594,78 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                   active={t.id === state.activeTabId}
                   onSelect={() => selectTab(t)}
                   onContext={() => setCtxTab(t.id)}
-                  onClose={() => dispatch({ type: 'CLOSE_TAB', id: t.id })}
+                  onClose={() => closeTab(t)}
                 />
               ))}
             </View>
+          ) : null}
+
+          {/* ================= item tidak aktif (Chrome-style) ================= */}
+          {staleUngrouped.length > 0 ? (
+            <View style={{ marginTop: spacing.md }}>
+              <Pressable
+                onPress={() => setShowInactive((v) => !v)}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, marginBottom: 8 }}>
+                <Icon name="clock" size={15} color={theme.subtext} />
+                <Text
+                  style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '700', marginLeft: 6, flex: 1 }}>
+                  Item tidak aktif — {staleUngrouped.length} tab belum dipakai 7+ hari
+                </Text>
+                <Icon name={showInactive ? 'chevronDown' : 'chevronRight'} size={15} color={theme.subtext} />
+              </Pressable>
+              {showInactive ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+                  {staleUngrouped.map((t) => (
+                    <TabCard
+                      key={t.id}
+                      tab={t}
+                      theme={theme}
+                      active={false}
+                      dimmed
+                      onSelect={() => selectTab(t)}
+                      onContext={() => setCtxTab(t.id)}
+                      onClose={() => closeTab(t)}
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+            </>
           )}
         </ScrollView>
+
+        {/* ================= urungkan tutup tab ================= */}
+        {undo ? (
+          <View style={{ paddingHorizontal: spacing.md, paddingBottom: 4 }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: theme.surface,
+                borderRadius: radius.md,
+                borderWidth: 1,
+                borderColor: theme.border,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+              }}>
+              <Icon name="tabs" size={15} color={theme.subtext} />
+              <Text numberOfLines={1} style={{ color: theme.subtext, fontSize: 13, flex: 1, marginLeft: 8 }}>
+                “{undo.title || hostOfUrl(undo.url) || 'Tab'}” ditutup
+              </Text>
+              <Pressable
+                onPress={restoreTab}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 8,
+                  backgroundColor: theme.accentSoft,
+                }}>
+                <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 13 }}>Urungkan</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
 
         {/* ================= footer ================= */}
         <View
@@ -589,7 +812,9 @@ function TabCard({
   tab,
   theme,
   active,
+  dimmed,
   groupColor,
+  groupName,
   onSelect,
   onContext,
   onClose,
@@ -597,46 +822,63 @@ function TabCard({
   tab: Tab;
   theme: Theme;
   active: boolean;
+  dimmed?: boolean;
   groupColor?: string;
+  groupName?: string;
   onSelect: () => void;
   onContext: () => void;
   onClose: () => void;
 }) {
   const host = hostOfUrl(tab.url) || tab.url || 'Tab baru';
+  const hc = hostColor(host);
   return (
     <Pressable
       onPress={onSelect}
       onLongPress={onContext}
-      style={{
+      android_ripple={{ color: theme.surface2, foreground: true }}
+      style={({ pressed }) => ({
         width: '47%',
         flexGrow: 1,
-        backgroundColor: theme.surface,
+        backgroundColor: pressed ? theme.surface2 : theme.surface,
         borderRadius: radius.md,
         borderWidth: active ? 2 : 1,
         borderColor: active ? groupColor ?? theme.accent : theme.border,
         padding: spacing.md,
-        minHeight: 112,
-      }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+        minHeight: 118,
+        opacity: dimmed ? 0.62 : 1,
+      })}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 9 }}>
         <View
           style={{
             width: 30,
             height: 30,
             borderRadius: 9,
-            backgroundColor: theme.surface2,
+            backgroundColor: hc + '2e',
+            borderWidth: 1,
+            borderColor: hc + '55',
             alignItems: 'center',
             justifyContent: 'center',
             marginRight: 8,
           }}>
-          <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 14 }}>
+          <Text style={{ color: hc, fontWeight: '800', fontSize: 14 }}>
             {host.charAt(0).toUpperCase()}
           </Text>
         </View>
         {tab.incognito ? <Text style={{ fontSize: 12 }}>🕶</Text> : null}
         {tab.loading ? <ActivityIndicator size="small" color={theme.accent} style={{ marginLeft: 6 }} /> : null}
         <View style={{ flex: 1 }} />
-        <Pressable hitSlop={10} onPress={onClose}>
-          <Icon name="close" size={16} color={theme.subtext} />
+        <Pressable
+          hitSlop={10}
+          onPress={onClose}
+          style={({ pressed }) => ({
+            width: 26,
+            height: 26,
+            borderRadius: 13,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: pressed ? theme.danger + '30' : 'transparent',
+          })}>
+          <Icon name="close" size={15} color={theme.subtext} />
         </Pressable>
       </View>
       <Text numberOfLines={2} style={{ color: theme.text, fontSize: 13.5, fontWeight: '600' }}>
@@ -645,19 +887,37 @@ function TabCard({
       <Text numberOfLines={1} style={{ color: theme.subtext, fontSize: 11.5, marginTop: 3 }}>
         {host}
       </Text>
-      {active ? (
-        <View
-          style={{
-            marginTop: 8,
-            alignSelf: 'flex-start',
-            backgroundColor: (groupColor ?? theme.accent) + '26',
-            borderRadius: 6,
-            paddingHorizontal: 7,
-            paddingVertical: 2,
-          }}>
-          <Text style={{ color: groupColor ?? theme.accent, fontSize: 10.5, fontWeight: '800' }}>TAB AKTIF</Text>
-        </View>
-      ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+        {active ? (
+          <View
+            style={{
+              alignSelf: 'flex-start',
+              backgroundColor: (groupColor ?? theme.accent) + '26',
+              borderRadius: 6,
+              paddingHorizontal: 7,
+              paddingVertical: 2,
+            }}>
+            <Text style={{ color: groupColor ?? theme.accent, fontSize: 10.5, fontWeight: '800' }}>TAB AKTIF</Text>
+          </View>
+        ) : null}
+        {groupName && groupColor ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: groupColor + '1c',
+              borderRadius: 6,
+              paddingHorizontal: 7,
+              paddingVertical: 2,
+              marginLeft: active ? 6 : 0,
+            }}>
+            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: groupColor, marginRight: 4 }} />
+            <Text numberOfLines={1} style={{ color: groupColor, fontSize: 10.5, fontWeight: '700' }}>
+              {groupName}
+            </Text>
+          </View>
+        ) : null}
+      </View>
     </Pressable>
   );
 }

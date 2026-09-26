@@ -32,6 +32,8 @@ export interface Tab {
   loading: boolean;
   progress: number;
   createdAt: number;
+  /** Terakhir kali tab menjadi aktif — untuk seksi "tidak aktif" (Chrome-style). */
+  lastActiveAt?: number;
 }
 
 export interface UserScriptMeta {

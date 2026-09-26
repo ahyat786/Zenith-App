@@ -181,6 +181,7 @@ function reducer(state: AppState, action: Action): AppState {
       } catch {
         // diabaikan
       }
+      const activate = action.activate !== false;
       const tab: Tab = {
         id: action.id,
         url: action.url,
@@ -193,8 +194,8 @@ function reducer(state: AppState, action: Action): AppState {
         loading: false,
         progress: 0,
         createdAt: Date.now(),
+        lastActiveAt: activate ? Date.now() : undefined,
       };
-      const activate = action.activate !== false;
       return {
         ...state,
         tabs: [...state.tabs, tab],
@@ -237,7 +238,13 @@ function reducer(state: AppState, action: Action): AppState {
     case 'CLOSE_ALL_TABS':
       return { ...state, tabs: [], activeTabId: null };
     case 'SET_ACTIVE_TAB':
-      return { ...state, activeTabId: action.id };
+      return {
+        ...state,
+        activeTabId: action.id,
+        tabs: state.tabs.map((t) =>
+          t.id === action.id ? { ...t, lastActiveAt: Date.now() } : t,
+        ),
+      };
     case 'SET_SPLIT':
       return { ...state, splitTabIds: action.ids.length === 2 ? action.ids : [] };
     case 'UPDATE_TAB': {

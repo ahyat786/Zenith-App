@@ -17,6 +17,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  ToastAndroid,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +31,7 @@ import { getWebView } from './refs';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, IconButton, Row, Sheet, ToggleRow, type SheetAction } from '../ui/kit';
 import { adblockStats, type AdblockStats } from '../core/native';
+import { DESKTOP_UA, isDesktopUa } from '../core/desktop';
 import { subscribeDownloads, type DownloadJob } from '../core/downloads';
 import type { Tab } from '../types';
 
@@ -54,11 +56,10 @@ export function BrowserScreen() {
   const adblockOn = state.settings.adblockEnabled && siteCfg?.adblockEnabled !== false;
   const bookmark = activeTab ? isBookmarked(state, activeTab.url) : undefined;
   const host = activeTab ? hostOfUrl(activeTab.url) : '';
-  const DESKTOP_UA =
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-  const isDesktopMode = siteCfg?.userAgent === DESKTOP_UA;
+  const isDesktopMode = isDesktopUa(siteCfg?.userAgent);
   const toggleDesktopMode = () => {
     if (!host || !activeTab) {
+      ToastAndroid.show('Buka situs dulu — mode desktop berlaku per situs', ToastAndroid.SHORT);
       return;
     }
     dispatch({
@@ -66,6 +67,10 @@ export function BrowserScreen() {
       host,
       patch: { userAgent: isDesktopMode ? '' : DESKTOP_UA },
     });
+    ToastAndroid.show(
+      isDesktopMode ? '📱 Mode mobile — memuat ulang…' : '🖥️ Mode desktop — memuat ulang…',
+      ToastAndroid.SHORT,
+    );
     setTimeout(() => {
       const wv = getWebView(activeTab.id);
       if (wv) {
@@ -341,6 +346,7 @@ export function BrowserScreen() {
       {/* PILL alamat */}
       <Pressable
         onPress={activeTab ? openOmniboxEdit : () => openOmniboxNew()}
+        android_ripple={{ color: theme.surface2, foreground: true }}
         style={({ pressed }) => ({
           flex: 1,
           flexDirection: 'row',
@@ -349,8 +355,8 @@ export function BrowserScreen() {
           borderRadius: radius.pill,
           paddingHorizontal: 13,
           height: 42,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: theme.border,
+          borderWidth: 1,
+          borderColor: isDesktopMode ? theme.accent : theme.border,
         })}>
         {activeTab?.url.startsWith('https://') ? (
           <Icon name="lock" size={13} color={theme.ok} />
@@ -432,6 +438,26 @@ export function BrowserScreen() {
         disabled={!activeTab?.canGoForward}
         onPress={() => activeTab && getWebView(activeTab.id)?.goForward()}
       />
+      {/* Refresh / Stop */}
+      <IconButton
+        name={activeTab?.loading ? 'close' : 'refresh'}
+        theme={theme}
+        disabled={!activeTab}
+        onPress={() => {
+          if (!activeTab) {
+            return;
+          }
+          const wv = getWebView(activeTab.id);
+          if (!wv) {
+            return;
+          }
+          if (activeTab.loading) {
+            wv.stopLoading();
+          } else {
+            wv.reload();
+          }
+        }}
+      />
       <Pressable
         onPress={() => openOmniboxNew()}
         hitSlop={4}
@@ -452,12 +478,29 @@ export function BrowserScreen() {
         badge={wsTabs.length || undefined}
         onPress={() => dispatch({ type: 'SET_UI', patch: { tabSwitcher: true } })}
       />
+      {/* Mode desktop per-situs */}
+      <Pressable
+        onPress={toggleDesktopMode}
+        hitSlop={4}
+        accessibilityLabel="Mode desktop"
+        style={({ pressed }) => ({
+          width: 46,
+          height: 46,
+          borderRadius: 23,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: isDesktopMode ? theme.accentSoft : pressed ? theme.surface2 : 'transparent',
+          borderWidth: 1,
+          borderColor: isDesktopMode ? theme.accent : 'transparent',
+        })}>
+        <Icon name="monitor" size={22} color={isDesktopMode ? theme.accent : theme.text} />
+      </Pressable>
       <IconButton name="more" theme={theme} onPress={() => setMenuOpen(true)} />
     </View>
   );
 
   const bars = compact ? null : (
-    <View style={{ backgroundColor: theme.bar, zIndex: 20, elevation: 20 }}>
+    <View style={{ backgroundColor: theme.bar, zIndex: 20 }}>
       {workspaceBar}
       {addressRow}
       {progressBar}

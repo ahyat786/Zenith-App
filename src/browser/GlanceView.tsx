@@ -47,6 +47,7 @@ export function GlanceView({ theme }: { theme: Theme }) {
         bottom: 0,
         backgroundColor: theme.overlay,
         zIndex: 40,
+        elevation: 30,
         alignItems: 'center',
         justifyContent: 'flex-end',
       }}>

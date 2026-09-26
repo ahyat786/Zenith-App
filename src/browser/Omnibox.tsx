@@ -11,6 +11,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
   Keyboard,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -42,8 +43,13 @@ export function Omnibox({ theme }: { theme: Theme }) {
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    const t = setTimeout(() => inputRef.current?.focus(), 120);
-    return () => clearTimeout(t);
+    // autoFocus menangani mayoritas kasus; retry cadangan untuk perangkat lambat.
+    const t1 = setTimeout(() => inputRef.current?.focus(), 120);
+    const t2 = setTimeout(() => inputRef.current?.focus(), 450);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 
   const close = () => {
@@ -201,19 +207,19 @@ export function Omnibox({ theme }: { theme: Theme }) {
   const screenH = Dimensions.get('window').height;
 
   return (
-    <View
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: theme.overlay,
-        zIndex: 80,
-      }}>
-      <Pressable style={{ flex: 1 }} onPress={close} />
+    /* Modal native = selalu tampil di atas bar/WebView (perbaikan v0.3.2:
+       overlay absolute biasa kalah dari view ber-elevation di Android). */
+    <Modal
+      transparent
+      visible
+      animationType="fade"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={close}>
+      <View style={{ flex: 1, backgroundColor: theme.overlay }}>
+        <Pressable style={{ flex: 1 }} onPress={close} />
 
-      {/* Panel mengambang DI ATAS — keyboard di bawah tidak pernah menutup */}
+        {/* Panel mengambang DI ATAS — keyboard di bawah tidak pernah menutup */}
       <View
         style={{
           position: 'absolute',
@@ -252,6 +258,7 @@ export function Omnibox({ theme }: { theme: Theme }) {
             ref={inputRef}
             value={text}
             onChangeText={setText}
+            autoFocus
             placeholder={omnibox.incognito ? 'Cari di tab privat…' : 'Cari atau ketik URL'}
             placeholderTextColor={theme.subtext}
             autoCapitalize="none"
@@ -369,11 +376,12 @@ export function Omnibox({ theme }: { theme: Theme }) {
                   </Text>
                 ) : null}
               </View>
-              <Icon name="chevronRight" size={15} color={theme.border} />
+                <Icon name="chevronRight" size={15} color={theme.border} />
             </Pressable>
           ))}
         </ScrollView>
       </View>
-    </View>
+      </View>
+    </Modal>
   );
 }

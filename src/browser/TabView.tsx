@@ -20,6 +20,7 @@ import type { Tab } from '../types';
 import type { Theme } from '../theme';
 import { useStore } from '../state/store';
 import { BRIDGE_SCRIPT, joinPayload } from '../core/inject';
+import { DESKTOP_INJECT_SCRIPT, DESKTOP_UA, isDesktopUa } from '../core/desktop';
 import { planCached } from '../core/plan';
 import { webviewRefs } from './refs';
 import { Button } from '../ui/kit';
@@ -38,6 +39,8 @@ export function TabView({ tab, active, theme }: Props) {
   const injectGen = useRef(0);
 
   const siteCfg = siteConfigFor(tab.url);
+  /** Mode desktop per-situs: UA macOS + viewport 1280 + scalesPageToFit. */
+  const desktop = isDesktopUa(siteCfg?.userAgent);
 
   const setRef = useCallback(
     (ref: any) => {
@@ -240,7 +243,7 @@ export function TabView({ tab, active, theme }: Props) {
         source={{ uri: initialUrl }}
         style={{ flex: 1, backgroundColor: theme.bg }}
         originWhitelist={['*']}
-        injectedJavaScriptBeforeContentLoaded={BRIDGE_SCRIPT}
+        injectedJavaScriptBeforeContentLoaded={BRIDGE_SCRIPT + '\n' + DESKTOP_INJECT_SCRIPT}
         onMessage={onMessage as any}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onNavigationStateChange={onNavigationStateChange}
@@ -285,8 +288,9 @@ export function TabView({ tab, active, theme }: Props) {
         domStorageEnabled
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
-        userAgent={siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent="Zenith/0.1.0"
+        userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
+        applicationNameForUserAgent="Zenith/0.3.2"
+        scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
         setSupportMultipleWindows

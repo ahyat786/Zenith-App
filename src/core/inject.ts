@@ -75,7 +75,7 @@ export const SHIM_SCRIPT = String.raw`
       return s;
     } catch (e) { return null; }
   }
-  window.GM_info = window.GM_info || { scriptHandler: 'Zenith', version: '0.1.0', script: { name: '', version: '' } };
+  window.GM_info = window.GM_info || { scriptHandler: 'Zenith', version: '0.3.2', script: { name: '', version: '' } };
   window.GM = window.GM || {};
   window.GM_addStyle = window.GM_addStyle || mkStyle;
   window.GM_setValue = window.GM_setValue || function (k, v) { try { localStorage.setItem(PREFIX + k, JSON.stringify(v)); } catch (e) {} };
