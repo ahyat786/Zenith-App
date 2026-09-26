@@ -57,19 +57,19 @@ Zenith menggabungkan tiga filosofi browser ke satu aplikasi Android native yang 
 
 ## 📱 Fitur
 
-- **Omnibox mengambang ala Zen** — tombol `+` membuka URL bar di atas tab saat ini; tanpa halaman tab baru khusus. Saran dari mesin pencari + riwayat + bookmark + tab terbuka.
-- **Workspaces ala Zen** — kelompokkan tab per aktivitas (emoji + nama), pindah tab antar workspace.
-- **Compact mode ala Zen** — sembunyikan semua bar untuk browsing penuh.
-- **Split view ala Zen** — dua tab berdampingan (tahan card tab → *Split dengan tab ini*).
-- **Glance ala Zen** — tekan-lama tautan → *Pratinjau cepat*: pratinjau melayang tanpa meninggalkan halaman, bisa di-expand ke tab baru atau di-split.
-- **Skrip ala Via** — userscript format Greasy Fork: `@name`, `@match`, `@include`/`@exclude` (glob/regex), `@run-at`, `@grant`; impor dari URL atau tempel kode; aktif/mati + urutan jalan; shim `GM_*` (`GM_addStyle`, `GM_get/set/Value`, `GM_listValues`, `unsafeWindow`).
-- **Ekstensi ala Kiwi** — impor ZIP ber-`manifest.json` (MV2/MV3); `content_scripts` disuntik sesuai `matches`/`exclude_matches`/`run_at`; shim `chrome.storage.local` & `chrome.runtime.sendMessage`. ⚠️ *Service worker/background tidak dijalankan (batas WebView).*
+- **Omnibox mengambang (Zen)** — tombol `+` membuka URL bar di atas tab saat ini; tanpa halaman tab baru khusus. Saran dari mesin pencari + riwayat + bookmark + tab terbuka.
+- **Workspaces (Zen)** — kelompokkan tab per aktivitas (emoji + nama), pindah tab antar workspace.
+- **Compact mode (Zen)** — sembunyikan semua bar untuk browsing penuh.
+- **Split view (Zen)** — dua tab berdampingan (tahan card tab → *Split dengan tab ini*).
+- **Glance (Zen)** — tekan-lama tautan → *Pratinjau cepat*: pratinjau melayang tanpa meninggalkan halaman, bisa di-expand ke tab baru atau di-split.
+- **Skrip (format Via)** — userscript format Greasy Fork: `@name`, `@match`, `@include`/`@exclude` (glob/regex), `@run-at`, `@grant`; impor dari URL atau tempel kode; aktif/mati + urutan jalan; shim `GM_*` (`GM_addStyle`, `GM_get/set/Value`, `GM_listValues`, `unsafeWindow`).
+- **Ekstensi (subset Kiwi)** — impor ZIP ber-`manifest.json` (MV2/MV3); `content_scripts` disuntik sesuai `matches`/`exclude_matches`/`run_at`; shim `chrome.storage.local` & `chrome.runtime.sendMessage`. ⚠️ *Service worker/background tidak dijalankan (batas WebView).*
 - **Pemblokir iklan level jaringan** — daftar hosts bawaan (aman, terkurasi) + impor daftar besar (StevenBlack/adAway) dari URL; allowlist per situs; statistik jumlah blokir; diblokir di `shouldInterceptRequest` (Kotlin→Rust) — bukan sekadar CSS.
-- **Pengaturan situs ala Via** — per host: matikan JavaScript, matikan pemblokir, UA desktop/kustom, CSS kustom (userstyle).
-- **Mesin pencari kustom ala Zen** — URL templat `%s` + URL saran; Google/DuckDuckGo/Bing/Wikipedia ID bawaan.
-- **Unduhan cepat ala Via** — mesin unduhan **multi-thread (4 koneksi + Range paralel)** di Kotlin: banner progres + kecepatan langsung di browser, layar Unduhan (mulai dari URL, batal, buka, bagikan, hapus), fallback opsional ke DownloadManager sistem.
-- **Shields ala Brave** — tombol perisai dengan **penghitung blokir real-time**, panel per-situs (blokir iklan, JavaScript, HTTPS), **upgrade HTTPS otomatis** (http → https), dan mesin pencari **Brave Search** bawaan.
-- **Tab privat** 🕶, bookmark, riwayat (500 entri), pencarian terakhir di omnibox, sesi dipulihkan otomatis, tema gelap/terang/sistem, bar bawah (Via) atau atas (Zen).
+- **Pengaturan situs (Via)** — per host: matikan JavaScript, matikan pemblokir, UA desktop/kustom, CSS kustom (userstyle).
+- **Mesin pencari kustom (Zen)** — URL templat `%s` + URL saran; Google/DuckDuckGo/Bing/Wikipedia ID bawaan.
+- **Unduhan cepat multi-thread** — mesin unduhan **multi-thread (4 koneksi + Range paralel)** di Kotlin: banner progres + kecepatan langsung di browser, layar Unduhan (mulai dari URL, batal, buka, bagikan, hapus), fallback opsional ke DownloadManager sistem.
+- **Shields (Brave)** — tombol perisai dengan **penghitung blokir real-time**, panel per-situs (blokir iklan, JavaScript, HTTPS), **upgrade HTTPS otomatis** (http → https), dan mesin pencari **Brave Search** bawaan.
+- **Tab privat** 🕶, bookmark, riwayat (500 entri), pencarian terakhir di omnibox, sesi dipulihkan otomatis, tema gelap/terang/sistem, bar bawah atau atas.
 - **Android 7.0 (API 24) → Android 16/17 (API 36/37)** — satu APK universal 4 ABI.
 
 ## 📂 Struktur proyek

@@ -13,11 +13,19 @@ export interface Workspace {
   icon: string; // emoji
 }
 
+export interface TabGroup {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: number;
+}
+
 export interface Tab {
   id: string;
   url: string;
   title: string;
   workspaceId: string;
+  groupId?: string | null;
   incognito: boolean;
   canGoBack: boolean;
   canGoForward: boolean;

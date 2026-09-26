@@ -2,9 +2,9 @@
  * Payload JavaScript yang disuntikkan ke WebView.
  *
  * - BRIDGE_SCRIPT (document-start, statis): jembatan Zen, deteksi URL SPA,
- *   sinyal siklus dokumen, menu tautan tekan-lama (Glance ala Zen).
- * - SHIM_SCRIPT: API GM_* (userscript ala Via/Greasy Fork) + chrome.* mini
- *   (subset ekstensi ala Kiwi).
+ *   sinyal siklus dokumen, menu tautan tekan-lama (Glance).
+ * - SHIM_SCRIPT: API GM_* (userscript Via/Greasy Fork) + chrome.* mini
+ *   (subset ekstensi).
  * - wrapScript: pembungkus idempoten + penangkap error.
  */
 

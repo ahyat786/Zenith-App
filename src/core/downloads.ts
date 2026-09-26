@@ -1,5 +1,5 @@
 /**
- * Unduhan cepat ala Via — jembatan ke ZenithDownloads (Kotlin).
+ * Unduhan cepat — jembatan ke ZenithDownloads (Kotlin).
  * Multi-thread (4 koneksi paralel + Range requests) untuk unduhan
  * secepat mungkin; jatuh mulus bila modul native tidak tersedia.
  */

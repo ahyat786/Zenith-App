@@ -1,6 +1,6 @@
 /**
  * Contoh bawaan: userscript (format Via/Greasy Fork) dan ekstensi
- * (manifest Chrome ala Kiwi) untuk mencoba fitur tanpa unduhan.
+ * (manifest Chrome) untuk mencoba fitur tanpa unduhan.
  */
 
 export interface ExampleScript {

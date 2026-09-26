@@ -1,5 +1,5 @@
 /**
- * ExtensionsScreen — manajer ekstensi ala Kiwi Browser.
+ * ExtensionsScreen — manajer ekstensi Chrome.
  * Mengimpor .zip ekstensi Chrome (MV2/MV3), mem-parse manifest di inti Rust,
  * lalu menyuntikkan content scripts (js/css) yang cocok.
  *
@@ -165,7 +165,7 @@ export function ExtensionsScreen() {
           theme={theme}
           icon="puzzle"
           title="Belum ada ekstensi"
-          subtitle="Impor ekstensi Chrome (.zip dengan manifest.json) — content scripts dijalankan, mirip Kiwi."
+          subtitle="Impor ekstensi Chrome (.zip dengan manifest.json) — content scripts dijalankan otomatis."
         />
       ) : null}
 

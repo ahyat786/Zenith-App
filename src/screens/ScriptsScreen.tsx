@@ -1,5 +1,5 @@
 /**
- * ScriptsScreen — manajer userscript ala Via Browser.
+ * ScriptsScreen — manajer userscript.
  * Mendukung format Greasy Fork (`// ==UserScript==` dengan @match,
  * @include/@exclude, @run-at) — diparse oleh inti Rust.
  */
@@ -116,7 +116,7 @@ export function ScriptsScreen() {
           theme={theme}
           icon="code"
           title="Belum ada skrip"
-          subtitle="Tambahkan userscript ala Via/Greasy Fork — tempel kodenya atau impor dari URL."
+          subtitle="Userscript format Greasy Fork — tempel kodenya atau impor dari URL."
         />
       ) : null}
 

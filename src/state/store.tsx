@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   Bookmark,
   Extension,
+  TabGroup,
   HistoryItem,
   OmniboxState,
   Screen,
@@ -40,6 +41,7 @@ export interface AppState {
   activeWorkspaceId: string;
   tabs: Tab[];
   activeTabId: string | null;
+  tabGroups: TabGroup[];
   splitTabIds: string[];
   scripts: UserScript[];
   extensions: Extension[];
@@ -66,6 +68,7 @@ const initialState: AppState = {
   activeWorkspaceId: DEFAULT_WORKSPACES[0].id,
   tabs: [],
   activeTabId: null,
+  tabGroups: [],
   splitTabIds: [],
   scripts: [],
   extensions: [],
@@ -89,6 +92,10 @@ type Action =
   | { type: 'SET_SPLIT'; ids: string[] }
   | { type: 'UPDATE_TAB'; id: string; patch: Partial<Tab> }
   | { type: 'MOVE_TAB'; id: string; workspaceId: string }
+  | { type: 'ADD_GROUP'; id: string; name: string; color: string }
+  | { type: 'UPDATE_GROUP'; id: string; patch: Partial<TabGroup> }
+  | { type: 'DEL_GROUP'; id: string }
+  | { type: 'SET_TAB_GROUP'; tabId: string; groupId: string | null }
   | { type: 'SET_ACTIVE_WORKSPACE'; id: string }
   | { type: 'ADD_WORKSPACE'; id: string; name: string; icon: string }
   | { type: 'UPDATE_WORKSPACE'; id: string; patch: Partial<Workspace> }
@@ -126,9 +133,14 @@ function reducer(state: AppState, action: Action): AppState {
             ? p.settings.engines
             : DEFAULT_ENGINES,
       };
-      // Rekonsiliasi: workspace aktif harus mengikuti tab aktif (bug fix)
+      // Rekonsiliasi: tab aktif harus valid; kalau tidak, pakai tab pertama.
+      // (bug v0.2: activeTabId basi → semua tombol bar bawah disabled)
       const tabs = p.tabs ?? [];
-      const activeTab = tabs.find((t) => t.id === p.activeTabId) ?? null;
+      let activeTab = tabs.find((t) => t.id === p.activeTabId) ?? null;
+      if (!activeTab && tabs.length > 0) {
+        activeTab = tabs[0];
+      }
+      const activeTabId = activeTab ? activeTab.id : null;
       const activeWorkspaceId = activeTab
         ? activeTab.workspaceId
         : (p.activeWorkspaceId ?? DEFAULT_WORKSPACES[0].id);
@@ -137,8 +149,9 @@ function reducer(state: AppState, action: Action): AppState {
         settings,
         workspaces: p.workspaces?.length ? p.workspaces : DEFAULT_WORKSPACES,
         activeWorkspaceId,
+        activeTabId,
+        tabGroups: p.tabGroups ?? [],
         tabs,
-        activeTabId: p.activeTabId ?? null,
         scripts: p.scripts ?? [],
         extensions: p.extensions ?? [],
         history: p.history ?? [],
@@ -157,11 +170,23 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_OMNIBOX':
       return { ...state, ui: { ...state.ui, omnibox: { ...state.ui.omnibox, ...action.patch } } };
     case 'ADD_TAB': {
+      // Grup target dari "Tab baru di grup ini" (TabSwitcher)
+      let pendingGroup: string | null = null;
+      try {
+        const flag = (globalThis as any)?.__ZENITH_NEXT_GROUP;
+        if (typeof flag === 'string' && state.tabGroups.some((g) => g.id === flag)) {
+          pendingGroup = flag;
+        }
+        delete (globalThis as any).__ZENITH_NEXT_GROUP;
+      } catch {
+        // diabaikan
+      }
       const tab: Tab = {
         id: action.id,
         url: action.url,
         title: '',
         workspaceId: action.workspaceId ?? state.activeWorkspaceId,
+        groupId: pendingGroup,
         incognito: !!action.incognito,
         canGoBack: false,
         canGoForward: false,
@@ -227,6 +252,36 @@ function reducer(state: AppState, action: Action): AppState {
       );
       return { ...state, tabs };
     }
+    case 'ADD_GROUP':
+      return {
+        ...state,
+        tabGroups: [
+          ...state.tabGroups,
+          { id: action.id, name: action.name, color: action.color, createdAt: Date.now() },
+        ],
+      };
+    case 'UPDATE_GROUP':
+      return {
+        ...state,
+        tabGroups: state.tabGroups.map((g) =>
+          g.id === action.id ? { ...g, ...action.patch } : g,
+        ),
+      };
+    case 'DEL_GROUP':
+      return {
+        ...state,
+        tabGroups: state.tabGroups.filter((g) => g.id !== action.id),
+        tabs: state.tabs.map((t) =>
+          t.groupId === action.id ? { ...t, groupId: null } : t,
+        ),
+      };
+    case 'SET_TAB_GROUP':
+      return {
+        ...state,
+        tabs: state.tabs.map((t) =>
+          t.id === action.tabId ? { ...t, groupId: action.groupId } : t,
+        ),
+      };
     case 'SET_ACTIVE_WORKSPACE': {
       const first = state.tabs.find((t) => t.workspaceId === action.id) ?? null;
       return {

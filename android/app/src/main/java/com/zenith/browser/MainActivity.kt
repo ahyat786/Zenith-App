@@ -1,5 +1,6 @@
 package com.zenith.browser
 
+import android.os.Bundle
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -12,6 +13,18 @@ class MainActivity : ReactActivity() {
    * rendering of the component.
    */
   override fun getMainComponentName(): String = "Zenith"
+
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    // Edge-to-edge eksplisit (Android 15+): memastikan inset sistem (bar navigasi)
+    // terlapor benar ke react-native-safe-area-context sehingga tombol bar bawah
+    // tidak tertutup area gestur dan tetap bisa diklik.
+    try {
+      androidx.activity.EdgeToEdge.enable(this)
+    } catch (_: Throwable) {
+      // perangkat lama — biarkan perilaku bawaan
+    }
+  }
 
   /**
    * Returns the instance of the [ReactActivityDelegate]. We use [DefaultReactActivityDelegate]

@@ -37,13 +37,14 @@ export function AboutScreen() {
             borderColor: theme.accent,
           }}>
           <Text style={{ fontSize: 32, fontWeight: '900', color: theme.accent }}>Z</Text>
+          <Text style={{ position: 'absolute', right: 12, bottom: 10, fontSize: 15 }}>🩷</Text>
         </View>
         <Text style={{ color: theme.text, fontSize: 20, fontWeight: '800' }}>Zenith Browser</Text>
         <Text style={{ color: theme.subtext, fontSize: 13 }}>
-          v0.2.0 • Rust + React Native • Android 7.0+
+          v0.3.0 • Rust + React Native • Android 7.0+
         </Text>
         <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 4, textAlign: 'center', lineHeight: 18 }}>
-          Browser ringan bergaya Zen + skrip ala Via + ekstensi ala Kiwi\n+ shields ala Brave. Tanpa telemetri.
+          Zenith — cepat, ringan, privat. Tanpa telemetri.
         </Text>
         <Text style={{ color: theme.accent, fontSize: 12.5, marginTop: 8, fontWeight: '700' }}>
           Built with 🩷 Pistis Litae
@@ -55,7 +56,7 @@ export function AboutScreen() {
           theme={theme}
           icon="zap"
           title="Built with 🩷 Pistis Litae"
-          subtitle="Penggabungan Zen + Via + Kiwi dalam Rust + React Native"
+          subtitle="Rust + React Native — terinspirasi Zen, Via, Kiwi, dan Brave"
           onPress={() => Linking.openURL('https://github.com/ahyat786/Zenith-App').catch(() => {})}
           last
         />

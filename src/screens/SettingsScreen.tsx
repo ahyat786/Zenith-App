@@ -131,8 +131,8 @@ export function SettingsScreen() {
             value={s.barPosition}
             onValueChange={(v) => dispatch({ type: 'SET_SETTINGS', patch: { barPosition: v } })}
             options={[
-              { value: 'bottom', label: 'Bawah (ala Via)' },
-              { value: 'top', label: 'Atas (ala Zen)' },
+              { value: 'bottom', label: 'Bawah' },
+              { value: 'top', label: 'Atas' },
             ]}
           />
         </View>
@@ -192,7 +192,7 @@ export function SettingsScreen() {
           theme={theme}
           icon="plus"
           title="Tambah mesin pencari"
-          subtitle="URL dengan %s untuk kueri — ala Zen"
+          subtitle="URL dengan %s untuk kueri"
           last
           onPress={() => setAddEngine(true)}
         />
@@ -257,7 +257,7 @@ export function SettingsScreen() {
           theme={theme}
           icon="download"
           title="Unduhan cepat multi-thread"
-          subtitle="4 koneksi paralel — ala Via; matikan untuk pakai sistem"
+          subtitle="4 koneksi paralel; matikan untuk pakai unduhan sistem"
           value={s.fastDownloads}
           onValueChange={(v) => dispatch({ type: 'SET_SETTINGS', patch: { fastDownloads: v } })}
         />

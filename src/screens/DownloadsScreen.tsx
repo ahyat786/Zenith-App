@@ -1,5 +1,5 @@
 /**
- * DownloadsScreen — manajer unduhan (ala Via: cepat, multi-thread).
+ * DownloadsScreen — manajer unduhan (cepat, multi-thread).
  * Menampilkan unduhan aktif (progres + kecepatan + batal), selesai
  * (buka / bagikan / hapus), dan mulai unduhan manual dari URL.
  */
@@ -92,7 +92,7 @@ export function DownloadsScreen() {
   return (
     <ScreenShell
       title="Unduhan"
-      subtitle={downloadsAvailable ? 'Multi-thread ala Via — 4 koneksi paralel' : 'Modul native tidak tersedia'}
+      subtitle={downloadsAvailable ? 'Multi-thread — 4 koneksi paralel' : 'Modul native tidak tersedia'}
       onBack={back}
       theme={theme}>
       {!downloadsAvailable ? (

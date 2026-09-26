@@ -85,7 +85,7 @@ export function Omnibox({ theme }: { theme: Theme }) {
       const q = text.trim();
       try {
         if (!q) {
-          // kosong → tampilkan pencarian terakhir (ala Zen)
+          // kosong → tampilkan pencarian terakhir
           const recents: SuggestionRow[] = state.settings.recentSearches.slice(0, 8).map((rs) => ({
             key: 'r:' + rs,
             icon: 'clock',

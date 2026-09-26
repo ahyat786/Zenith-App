@@ -226,11 +226,11 @@ export function IconButton({
       disabled={disabled}
       hitSlop={6}
       style={({ pressed }) => ({
-        width: 40,
-        height: 40,
+        width: 46,
+        height: 46,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 20,
+        borderRadius: 23,
         backgroundColor: pressed ? theme.surface2 : 'transparent',
         opacity: disabled ? 0.35 : 1,
       })}>

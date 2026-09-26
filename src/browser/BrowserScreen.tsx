@@ -54,8 +54,34 @@ export function BrowserScreen() {
   const adblockOn = state.settings.adblockEnabled && siteCfg?.adblockEnabled !== false;
   const bookmark = activeTab ? isBookmarked(state, activeTab.url) : undefined;
   const host = activeTab ? hostOfUrl(activeTab.url) : '';
+  const DESKTOP_UA =
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+  const isDesktopMode = siteCfg?.userAgent === DESKTOP_UA;
+  const toggleDesktopMode = () => {
+    if (!host || !activeTab) {
+      return;
+    }
+    dispatch({
+      type: 'SET_SITE_CONFIG',
+      host,
+      patch: { userAgent: isDesktopMode ? '' : DESKTOP_UA },
+    });
+    setTimeout(() => {
+      const wv = getWebView(activeTab.id);
+      if (wv) {
+        wv.reload();
+      }
+    }, 180);
+  };
 
-  // ---------- statistik shields (Brave) ----------
+  // ---------- sinkron: tab aktif selalu di workspace aktif ----------
+  useEffect(() => {
+    if (activeTab && activeTab.workspaceId !== state.activeWorkspaceId) {
+      dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: activeTab.workspaceId });
+    }
+  }, [activeTab?.id, activeTab?.workspaceId, state.activeWorkspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------- statistik shields ----------
   const refreshStats = useCallback(async () => {
     setStats(await adblockStats());
   }, []);
@@ -151,6 +177,11 @@ export function BrowserScreen() {
     }
     actions.push(
       {
+        label: isDesktopMode ? '🔁 Mode mobile (situs ini)' : '🖥 Mode desktop (situs ini)',
+        icon: 'expand',
+        onPress: toggleDesktopMode,
+      },
+      {
         label: compact ? 'Keluar mode kompak' : 'Mode kompak (bebas bar)',
         icon: compact ? 'eyeOff' : 'eye',
         onPress: () => dispatch({ type: 'SET_UI', patch: { compact: !compact } }),
@@ -183,14 +214,14 @@ export function BrowserScreen() {
       },
       { label: 'Muat ulang', icon: 'refresh', onPress: () => activeTab && getWebView(activeTab.id)?.reload() },
       { label: 'Unduhan', icon: 'download', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'downloads' }) },
-      { label: 'Skrip (ala Via)', icon: 'code', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'scripts' }) },
-      { label: 'Ekstensi (ala Kiwi)', icon: 'puzzle', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'extensions' }) },
+      { label: 'Skrip', icon: 'code', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'scripts' }) },
+      { label: 'Ekstensi', icon: 'puzzle', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'extensions' }) },
       { label: 'Pengaturan situs', icon: 'globe', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'siteSettings' }) },
       { label: 'Pengaturan', icon: 'gear', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'settings' }) },
     );
     return actions;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splitActive, compact, bookmark, activeTab?.id, activeTab?.url]);
+  }, [splitActive, compact, bookmark, isDesktopMode, activeTab?.id, activeTab?.url]);
 
   const linkActions: SheetAction[] = useMemo(() => {
     const lm = state.ui.linkMenu;
@@ -271,7 +302,7 @@ export function BrowserScreen() {
 
   const addressRow = (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingTop: 2 }}>
-      {/* SHIELDS ala Brave */}
+      {/* SHIELDS */}
       <Pressable
         onPress={() => setShieldsOpen(true)}
         disabled={!activeTab}
@@ -327,6 +358,18 @@ export function BrowserScreen() {
         ) : (
           <Icon name="globe" size={14} color={theme.subtext} />
         )}
+        {isDesktopMode ? (
+          <View
+            style={{
+              backgroundColor: theme.accentSoft,
+              borderRadius: 5,
+              paddingHorizontal: 5,
+              paddingVertical: 1,
+              marginLeft: 5,
+            }}>
+            <Text style={{ color: theme.accent, fontSize: 9, fontWeight: '800' }}>DESKTOP</Text>
+          </View>
+        ) : null}
         <Text
           numberOfLines={1}
           style={{
@@ -415,17 +458,18 @@ export function BrowserScreen() {
   );
 
   const bars = compact ? null : (
-    <View style={{ backgroundColor: theme.bar }}>
+    <View style={{ backgroundColor: theme.bar, zIndex: 20, elevation: 20 }}>
       {workspaceBar}
       {addressRow}
       {progressBar}
-      <View style={{ paddingHorizontal: spacing.sm, paddingBottom: Math.max(insets.bottom, 4), paddingTop: 2 }}>
+      <View style={{ paddingHorizontal: spacing.xs, paddingBottom: Math.max(insets.bottom, 8), paddingTop: 4 }}>
         {toolbar}
       </View>
     </View>
   );
 
-  const empty = !activeTab && wsTabs.length === 0;
+  const empty = state.tabs.length === 0;
+  const wsEmptyButTabsExist = !empty && wsTabs.length === 0;
 
   // ---------- panel SHIELDS (Brave) ----------
   const shieldsSheet = (
@@ -477,9 +521,17 @@ export function BrowserScreen() {
         theme={theme}
         icon="lock"
         title="Upgrade HTTPS"
-        subtitle="Muat ulang untuk menerapkan (ala Brave)"
+        subtitle="Muat ulang untuk menerapkan"
         value={siteCfg?.httpsUpgrades !== false && state.settings.httpsUpgrades}
         onValueChange={(v) => host && dispatch({ type: 'SET_SITE_CONFIG', host, patch: { httpsUpgrades: v } })}
+      />
+      <ToggleRow
+        theme={theme}
+        icon="expand"
+        title="Mode desktop"
+        subtitle={isDesktopMode ? 'UA desktop aktif — matikan untuk mobile' : 'Tampilkan situs versi desktop'}
+        value={isDesktopMode}
+        onValueChange={() => toggleDesktopMode()}
       />
       <Row
         theme={theme}
@@ -505,6 +557,16 @@ export function BrowserScreen() {
       <View style={{ flex: 1 }}>
         {empty ? (
           <StartOverlay />
+        ) : wsEmptyButTabsExist ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+            <Icon name="folder" size={40} color={theme.subtext} />
+            <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700', marginTop: 12, textAlign: 'center' }}>
+              Tidak ada tab di workspace ini
+            </Text>
+            <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
+              Tab Anda ada di workspace lain — buka daftar tab untuk berpindah, atau tekan ＋ untuk tab baru.
+            </Text>
+          </View>
         ) : (
           <>
             {wsTabs.filter((t) => !splitIds.includes(t.id)).map((t) => renderTab(t))}
@@ -655,11 +717,12 @@ function StartOverlay() {
           borderColor: theme.accent,
         }}>
         <Text style={{ fontSize: 36, fontWeight: '900', color: theme.accent }}>Z</Text>
+        <Text style={{ position: 'absolute', right: 12, bottom: 10, fontSize: 17 }}>🩷</Text>
       </View>
       <View style={{ alignItems: 'center' }}>
         <Text style={{ color: theme.text, fontSize: 23, fontWeight: '800' }}>{greeting}</Text>
         <Text style={{ color: theme.subtext, fontSize: 13.5, marginTop: 4, textAlign: 'center' }}>
-          Ketuk untuk mencari atau mengetik URL — ala Zen, tanpa halaman rumah
+          Zenith — ketuk untuk mencari atau mengetik URL
         </Text>
       </View>
 
