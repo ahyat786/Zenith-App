@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
@@ -14,11 +15,15 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.io.Closeable
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -235,14 +240,22 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /** Buka target sebagai berkas akses acak (mendukung seek utk multi-thread). */
-    private fun openRaf(job: Job): RandomAccessFile {
+    /** Pegangan keluaran seekable (utk multi-thread) — FileChannel kompatibel API 24+. */
+    private class OutputHandle(val channel: FileChannel, private val pfd: ParcelFileDescriptor?) : Closeable {
+        override fun close() {
+            try { channel.close() } catch (_: Throwable) {}
+            try { pfd?.close() } catch (_: Throwable) {}
+        }
+    }
+
+    /** Buka target unduhan sebagai channel seekable (mendukung seek utk multi-thread). */
+    private fun openOutput(job: Job): OutputHandle {
         job.uri?.let { uri ->
             val pfd = reactApplicationContext.contentResolver.openFileDescriptor(uri, "rw")
                 ?: throw IOException("tidak dapat membuka target unduhan")
-            return RandomAccessFile(pfd.fileDescriptor, "rw")
+            return OutputHandle(FileOutputStream(pfd.fileDescriptor).channel, pfd)
         }
-        return RandomAccessFile(job.file!!, "rw")
+        return OutputHandle(RandomAccessFile(job.file!!, "rw").channel, null)
     }
 
     // ------------------------------------------------------------ inti
@@ -348,8 +361,8 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                 if (code !in 200..299) {
                     throw IOException("HTTP $code")
                 }
-                openRaf(job).use { raf ->
-                    raf.seek(pos)
+                openOutput(job).use { out ->
+                    out.channel.position(pos)
                     val buf = ByteArray(64 * 1024)
                     val input = conn.inputStream
                     while (!job.cancel.get()) {
@@ -357,7 +370,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                         if (read < 0) {
                             break
                         }
-                        raf.write(buf, 0, read)
+                        out.channel.write(ByteBuffer.wrap(buf, 0, read))
                         job.done.addAndGet(read.toLong())
                         pos += read
                     }
