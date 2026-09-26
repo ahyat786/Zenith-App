@@ -1,6 +1,7 @@
 package com.zenith.browser
 
 import android.os.Bundle
+import androidx.core.view.WindowCompat
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -16,11 +17,11 @@ class MainActivity : ReactActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    // Edge-to-edge eksplisit (Android 15+): memastikan inset sistem (bar navigasi)
-    // terlapor benar ke react-native-safe-area-context sehingga tombol bar bawah
-    // tidak tertutup area gestur dan tetap bisa diklik.
+    // Edge-to-edge: pastikan konten digambar dari ujung ke ujung dan inset
+    // sistem terlapor benar ke react-native-safe-area-context, sehingga
+    // tombol bar bawah tidak tertutup area gestur dan tetap bisa diklik.
     try {
-      androidx.activity.EdgeToEdge.enable(this)
+      WindowCompat.setDecorFitsSystemWindows(window, false)
     } catch (_: Throwable) {
       // perangkat lama — biarkan perilaku bawaan
     }
