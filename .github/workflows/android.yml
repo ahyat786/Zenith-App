@@ -1,0 +1,100 @@
+name: Build APK Android
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Rust core + Gradle APK (Built with 🩷 Pistis Litae)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Terima lisensi & pasang komponen SDK
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "ndk;27.1.12297006" "platforms;android-37.0" "build-tools;37.0.0" > /dev/null
+
+      - name: Setup Rust (4 target Android)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - name: Tambah cargo ke PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Cache cargo registry & build Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: zenith-cargo-${{ runner.os }}-${{ hashFiles('rust/zenith-core/Cargo.toml', 'rust/zenith-core/Cargo.lock') }}
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: npm install
+        run: npm install --no-audit --no-fund
+
+      - name: Uji inti Rust (cargo test)
+        run: cd rust && cargo test
+
+      - name: Typecheck TypeScript
+        run: npx tsc --noEmit
+
+      - name: Build APK release (Rust .so + Hermes bundle + Gradle)
+        run: cd android && ./gradlew assembleRelease --stacktrace
+
+      - name: Ganti nama APK
+        run: |
+          cd android/app/build/outputs/apk/release
+          mv app-release.apk "Zenith-${GITHUB_REF_NAME}-android.apk" 2>/dev/null || mv app-release.apk Zenith-android.apk
+          ls -lh
+
+      - name: Upload artifact APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Zenith-APK
+          path: android/app/build/outputs/apk/release/Zenith-*.apk
+          retention-days: 30
+
+      - name: Buat GitHub Release (jika tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/release/Zenith-*.apk
+          generate_release_notes: true
+          body: |
+            🅧 **Zenith Browser** — Rust + React Native
+            *Zen UX + skrip Via + ekstensi Kiwi*
+
+            **Built with 🩷 Pistis Litae**
+
+            Kompatibel: Android 7.0 (API 24) → Android 16/17 · 4 ABI (arm64-v8a, armeabi-v7a, x86, x86_64)
