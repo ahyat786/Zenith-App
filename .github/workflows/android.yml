@@ -26,13 +26,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Terima lisensi & pasang komponen SDK
+      # Runner GitHub sudah menyertakan Android SDK di ANDROID_HOME —
+      # cukup terima lisensi & pasang komponen yang dipin proyek.
+      - name: Siapkan komponen Android SDK (NDK 27.1 + platform 37)
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "ndk;27.1.12297006" "platforms;android-37.0" "build-tools;37.0.0" > /dev/null
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
+          fi
+          echo "SDKMANAGER=$SDKMANAGER"
+          (yes || true) | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "ndk;27.1.12297006" "platforms;android-37.0" "build-tools;37.0.0" > /dev/null
+          "$SDKMANAGER" --list_installed 2>/dev/null | grep -E "ndk;|platforms;android-37|build-tools;37" | head -5
 
       - name: Setup Rust (4 target Android)
         uses: dtolnay/rust-toolchain@stable
