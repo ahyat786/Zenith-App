@@ -220,7 +220,6 @@ pub extern "system" fn Java_com_zenith_browser_core_ZenithCoreJNI_hostOf<'local>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn json_roundtrip_userscript() {
@@ -241,7 +240,7 @@ mod tests {
             r#"{"name":"X","version":"1","content_scripts":[{"matches":["*://*/*"],"js":["a.js"]}]}"#,
         )
         .unwrap();
-        let v: Value = serde_json::to_value(&ext).unwrap();
+        let v = serde_json::to_value(&ext).unwrap();
         assert!(v["manifestVersion"].is_number());
         assert_eq!(v["contentScripts"][0]["runAt"], "document-idle");
     }
