@@ -243,6 +243,34 @@ export function SettingsScreen() {
         />
       </ListSection>
 
+      {/* ---------------- Privasi & unduhan (Brave + Via) ---------------- */}
+      <ListSection title="Privasi & unduhan" theme={theme}>
+        <ToggleRow
+          theme={theme}
+          icon="lock"
+          title="Upgrade HTTPS"
+          subtitle="Muat ulang untuk menerapkan — ala Brave"
+          value={s.httpsUpgrades}
+          onValueChange={(v) => dispatch({ type: 'SET_SETTINGS', patch: { httpsUpgrades: v } })}
+        />
+        <ToggleRow
+          theme={theme}
+          icon="download"
+          title="Unduhan cepat multi-thread"
+          subtitle="4 koneksi paralel — ala Via; matikan untuk pakai sistem"
+          value={s.fastDownloads}
+          onValueChange={(v) => dispatch({ type: 'SET_SETTINGS', patch: { fastDownloads: v } })}
+        />
+        <Row
+          theme={theme}
+          icon="folder"
+          title="Lihat unduhan"
+          subtitle="Progres, kecepatan, buka & bagikan berkas"
+          onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'downloads' })}
+          last
+        />
+      </ListSection>
+
       {/* ---------------- Data ---------------- */}
       <ListSection title="Data & privasi" theme={theme}>
         <Row

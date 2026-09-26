@@ -1,10 +1,12 @@
 /**
- * BrowserScreen — kerangka utama Zenith.
- * Menggabungkan UX Zen (omnibox mengambang, workspace, split, glance,
- * compact mode) dengan kemudahan Via (bar bawah ringkas).
+ * BrowserScreen — kerangka utama Zenith v0.2.
+ *
+ * UX final: Zen (omnibox mengambang di atas, workspaces, split, glance,
+ * compact, tanpa homepage) + Via (bar bawah ringkas, unduhan cepat)
+ * + Brave (tombol shields dengan penghitung blokir + upgrade HTTPS).
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -26,7 +28,9 @@ import { TabSwitcher } from './TabSwitcher';
 import { GlanceView } from './GlanceView';
 import { getWebView } from './refs';
 import { Icon } from '../ui/Icon';
-import { ActionSheet, IconButton, type SheetAction } from '../ui/kit';
+import { ActionSheet, IconButton, Row, Sheet, ToggleRow, type SheetAction } from '../ui/kit';
+import { adblockStats, type AdblockStats } from '../core/native';
+import { subscribeDownloads, type DownloadJob } from '../core/downloads';
 import type { Tab } from '../types';
 
 export function BrowserScreen() {
@@ -34,6 +38,9 @@ export function BrowserScreen() {
   const theme = useTheme(state.settings.theme);
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [shieldsOpen, setShieldsOpen] = useState(false);
+  const [stats, setStats] = useState<AdblockStats | null>(null);
+  const [download, setDownload] = useState<DownloadJob | null>(null);
 
   const wsTabs = tabsInWorkspace(state.activeWorkspaceId);
   const splitIds = state.splitTabIds;
@@ -46,6 +53,33 @@ export function BrowserScreen() {
   const siteCfg = activeTab ? siteConfigFor(activeTab.url) : undefined;
   const adblockOn = state.settings.adblockEnabled && siteCfg?.adblockEnabled !== false;
   const bookmark = activeTab ? isBookmarked(state, activeTab.url) : undefined;
+  const host = activeTab ? hostOfUrl(activeTab.url) : '';
+
+  // ---------- statistik shields (Brave) ----------
+  const refreshStats = useCallback(async () => {
+    setStats(await adblockStats());
+  }, []);
+  useEffect(() => {
+    refreshStats();
+    const t = setInterval(refreshStats, 4000);
+    return () => clearInterval(t);
+  }, [refreshStats, activeTab?.url]);
+
+  // ---------- banner unduhan (Via) ----------
+  useEffect(() => {
+    const unsub = subscribeDownloads((job) => {
+      if (job.status === 'downloading' || job.status === 'connecting') {
+        setDownload(job);
+      } else if (downloadRef.current?.id === job.id) {
+        setDownload(job.status === 'done' ? null : job);
+      }
+    });
+    return unsub;
+  }, []);
+  const downloadRef = React.useRef<DownloadJob | null>(null);
+  useEffect(() => {
+    downloadRef.current = download;
+  }, [download]);
 
   // ---------- tombol fisik kembali ----------
   useEffect(() => {
@@ -111,22 +145,18 @@ export function BrowserScreen() {
       { label: 'Tab privat', icon: 'eyeOff', onPress: () => openOmniboxNew(true) },
     ];
     if (splitActive) {
-      actions.push({
-        label: 'Keluar dari split',
-        icon: 'close',
-        onPress: () => dispatch({ type: 'SET_SPLIT', ids: [] }),
-      });
+      actions.push({ label: 'Keluar dari split', icon: 'close', onPress: () => dispatch({ type: 'SET_SPLIT', ids: [] }) });
     } else {
       actions.push({ label: 'Split layar', icon: 'split', onPress: doSplit });
     }
     actions.push(
       {
-        label: compact ? 'Keluar mode kompak' : 'Mode kompak',
+        label: compact ? 'Keluar mode kompak' : 'Mode kompak (bebas bar)',
         icon: compact ? 'eyeOff' : 'eye',
         onPress: () => dispatch({ type: 'SET_UI', patch: { compact: !compact } }),
       },
       {
-        label: bookmark ? 'Hapus bookmark' : 'Simpan bookmark',
+        label: bookmark ? 'Hapus bookmark' : 'Bookmark halaman ini',
         icon: bookmark ? 'starFilled' : 'star',
         onPress: () => {
           if (!activeTab?.url) {
@@ -149,15 +179,12 @@ export function BrowserScreen() {
       {
         label: 'Bagikan tautan',
         icon: 'share',
-        onPress: () => {
-          if (activeTab?.url) {
-            Share.share({ message: activeTab.url }).catch(() => {});
-          }
-        },
+        onPress: () => activeTab?.url && Share.share({ message: activeTab.url }).catch(() => {}),
       },
       { label: 'Muat ulang', icon: 'refresh', onPress: () => activeTab && getWebView(activeTab.id)?.reload() },
-      { label: 'Skrip', icon: 'code', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'scripts' }) },
-      { label: 'Ekstensi', icon: 'puzzle', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'extensions' }) },
+      { label: 'Unduhan', icon: 'download', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'downloads' }) },
+      { label: 'Skrip (ala Via)', icon: 'code', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'scripts' }) },
+      { label: 'Ekstensi (ala Kiwi)', icon: 'puzzle', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'extensions' }) },
       { label: 'Pengaturan situs', icon: 'globe', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'siteSettings' }) },
       { label: 'Pengaturan', icon: 'gear', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'settings' }) },
     );
@@ -171,81 +198,22 @@ export function BrowserScreen() {
       return [];
     }
     return [
-      {
-        label: 'Buka di tab baru',
-        icon: 'plus',
-        onPress: () => openNewTab(lm.url),
-      },
-      {
-        label: 'Buka di tab privat',
-        icon: 'eyeOff',
-        onPress: () => openNewTab(lm.url, { incognito: true }),
-      },
-      {
-        label: 'Pratinjau cepat (Glance)',
-        icon: 'eye',
-        onPress: () => dispatch({ type: 'SET_UI', patch: { glanceUrl: lm.url } }),
-      },
-      {
-        label: 'Bagikan tautan',
-        icon: 'share',
-        onPress: () => Share.share({ message: lm.url }).catch(() => {}),
-      },
-      {
-        label: 'Baca: ' + (lm.text ? lm.text.slice(0, 40) : hostOfUrl(lm.url)),
-        icon: 'info',
-        onPress: () => dispatch({ type: 'SET_UI', patch: { glanceUrl: lm.url } }),
-      },
+      { label: 'Buka di tab baru', icon: 'plus', onPress: () => openNewTab(lm.url) },
+      { label: 'Buka di tab privat', icon: 'eyeOff', onPress: () => openNewTab(lm.url, { incognito: true }) },
+      { label: 'Pratinjau cepat (Glance)', icon: 'eye', onPress: () => dispatch({ type: 'SET_UI', patch: { glanceUrl: lm.url } }) },
+      { label: 'Bagikan tautan', icon: 'share', onPress: () => Share.share({ message: lm.url }).catch(() => {}) },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.ui.linkMenu?.url, state.ui.linkMenu?.text]);
+  }, [state.ui.linkMenu?.url]);
 
   const renderTab = (tab: Tab, forceActive = false) => (
     <TabView key={tab.id} tab={tab} active={forceActive || tab.id === state.activeTabId} theme={theme} />
   );
 
-  // ---------- bilah alamat ----------
-  const addressPill = (
-    <Pressable
-      onPress={openOmniboxEdit}
-      disabled={!activeTab}
-      style={({ pressed }) => ({
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: pressed ? theme.surface2 : theme.pill,
-        borderRadius: radius.pill,
-        paddingHorizontal: 14,
-        height: 42,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: theme.border,
-      })}>
-      {activeTab?.url.startsWith('https://') ? (
-        <Icon name="lock" size={14} color={theme.ok} />
-      ) : (
-        <Icon name="globe" size={15} color={theme.subtext} />
-      )}
-      <Text
-        numberOfLines={1}
-        style={{
-          flex: 1,
-          color: theme.text,
-          fontSize: 14.5,
-          marginHorizontal: 8,
-          fontWeight: '500',
-        }}>
-        {activeTab
-          ? hostOfUrl(activeTab.url) || activeTab.url
-          : 'Cari atau ketik URL'}
-      </Text>
-      {activeTab?.loading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
-      {bookmark ? <Icon name="starFilled" size={14} color={theme.warn} /> : null}
-    </Pressable>
-  );
-
+  // ---------- elemen bar ----------
   const progressBar =
     activeTab?.loading && activeTab.progress > 0.02 && activeTab.progress < 1 ? (
-      <View style={{ height: 2.5, backgroundColor: 'transparent', marginTop: 3 }}>
+      <View style={{ height: 2.5, marginTop: 2 }}>
         <View
           style={{
             height: 2.5,
@@ -262,7 +230,7 @@ export function BrowserScreen() {
       horizontal
       showsHorizontalScrollIndicator={false}
       style={{ flexGrow: 0 }}
-      contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: 6 }}>
+      contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: 4 }}>
       {state.workspaces.map((ws) => {
         const active = ws.id === state.activeWorkspaceId;
         const count = state.tabs.filter((t) => t.workspaceId === ws.id).length;
@@ -278,10 +246,10 @@ export function BrowserScreen() {
               borderRadius: radius.pill,
               marginRight: 8,
               backgroundColor: active ? theme.accentSoft : theme.pill,
-              borderWidth: StyleSheet.hairlineWidth,
+              borderWidth: 1,
               borderColor: active ? theme.accent : theme.border,
             }}>
-            <Text style={{ fontSize: 13, marginRight: 5 }}>{ws.icon}</Text>
+            <Text style={{ fontSize: 12.5, marginRight: 5 }}>{ws.icon}</Text>
             <Text
               style={{
                 color: active ? theme.accent : theme.subtext,
@@ -301,8 +269,115 @@ export function BrowserScreen() {
     </ScrollView>
   ) : null;
 
+  const addressRow = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingTop: 2 }}>
+      {/* SHIELDS ala Brave */}
+      <Pressable
+        onPress={() => setShieldsOpen(true)}
+        disabled={!activeTab}
+        hitSlop={6}
+        style={({ pressed }) => ({
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 6,
+          backgroundColor: pressed ? theme.surface2 : 'transparent',
+        })}>
+        <Icon name={adblockOn ? 'shield' : 'shieldOff'} size={19} color={adblockOn ? theme.accent : theme.subtext} />
+        {adblockOn && stats && stats.blockedCount > 0 ? (
+          <View
+            style={{
+              position: 'absolute',
+              top: -1,
+              right: -3,
+              backgroundColor: theme.accent,
+              borderRadius: 7,
+              minWidth: 14,
+              height: 14,
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingHorizontal: 3,
+            }}>
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>
+              {stats.blockedCount > 99 ? '99+' : stats.blockedCount}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
+
+      {/* PILL alamat */}
+      <Pressable
+        onPress={openOmniboxEdit}
+        disabled={!activeTab}
+        style={({ pressed }) => ({
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: pressed ? theme.surface2 : theme.pill,
+          borderRadius: radius.pill,
+          paddingHorizontal: 13,
+          height: 42,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: theme.border,
+        })}>
+        {activeTab?.url.startsWith('https://') ? (
+          <Icon name="lock" size={13} color={theme.ok} />
+        ) : (
+          <Icon name="globe" size={14} color={theme.subtext} />
+        )}
+        <Text
+          numberOfLines={1}
+          style={{
+            flex: 1,
+            color: theme.text,
+            fontSize: 14.5,
+            marginHorizontal: 8,
+            fontWeight: '600',
+          }}>
+          {activeTab ? host || activeTab.url : 'Cari atau ketik URL'}
+        </Text>
+        {activeTab?.loading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
+      </Pressable>
+
+      {/* BOOKMARK */}
+      <Pressable
+        onPress={() => {
+          if (!activeTab?.url) {
+            return;
+          }
+          if (bookmark) {
+            dispatch({ type: 'DEL_BOOKMARK', id: bookmark.id });
+          } else {
+            dispatch({
+              type: 'ADD_BOOKMARK',
+              bookmark: {
+                id: `bm-${Date.now().toString(36)}`,
+                url: activeTab.url,
+                title: activeTab.title || host,
+              },
+            });
+          }
+        }}
+        disabled={!activeTab}
+        hitSlop={6}
+        style={({ pressed }) => ({
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginLeft: 6,
+          backgroundColor: pressed ? theme.surface2 : 'transparent',
+        })}>
+        <Icon name={bookmark ? 'starFilled' : 'star'} size={19} color={bookmark ? theme.warn : theme.subtext} />
+      </Pressable>
+    </View>
+  );
+
   const toolbar = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' }}>
       <IconButton
         name="back"
         theme={theme}
@@ -315,42 +390,110 @@ export function BrowserScreen() {
         disabled={!activeTab?.canGoForward}
         onPress={() => activeTab && getWebView(activeTab.id)?.goForward()}
       />
-      <IconButton
-        name="plus"
-        theme={theme}
+      <Pressable
         onPress={() => openOmniboxNew()}
-      />
+        hitSlop={4}
+        style={({ pressed }) => ({
+          width: 46,
+          height: 46,
+          borderRadius: 23,
+          backgroundColor: pressed ? theme.accent + 'd0' : theme.accent,
+          alignItems: 'center',
+          justifyContent: 'center',
+          elevation: 4,
+        })}>
+        <Icon name="plus" size={24} color="#fff" strokeWidth={2.4} />
+      </Pressable>
       <IconButton
         name="tabs"
         theme={theme}
         badge={wsTabs.length || undefined}
         onPress={() => dispatch({ type: 'SET_UI', patch: { tabSwitcher: true } })}
       />
-      <IconButton
-        name={adblockOn ? 'shield' : 'shieldOff'}
-        theme={theme}
-        onPress={() => dispatch({ type: 'SET_SETTINGS', patch: { adblockEnabled: !state.settings.adblockEnabled } })}
-        onLongPress={() => dispatch({ type: 'SET_SCREEN', screen: 'settings' })}
-      />
       <IconButton name="more" theme={theme} onPress={() => setMenuOpen(true)} />
     </View>
   );
 
-
   const bars = compact ? null : (
     <View style={{ backgroundColor: theme.bar }}>
       {workspaceBar}
-      <View style={{ paddingHorizontal: spacing.md, paddingTop: 4 }}>
-        {addressPill}
-        {progressBar}
-      </View>
-      <View style={{ paddingHorizontal: spacing.sm, paddingBottom: Math.max(insets.bottom, 6), paddingTop: 2 }}>
+      {addressRow}
+      {progressBar}
+      <View style={{ paddingHorizontal: spacing.sm, paddingBottom: Math.max(insets.bottom, 4), paddingTop: 2 }}>
         {toolbar}
       </View>
     </View>
   );
 
   const empty = !activeTab && wsTabs.length === 0;
+
+  // ---------- panel SHIELDS (Brave) ----------
+  const shieldsSheet = (
+    <Sheet visible={shieldsOpen} onClose={() => setShieldsOpen(false)} title={`Shields — ${host || 'tak ada situs'}`} theme={theme}>
+      <View style={{ paddingHorizontal: spacing.lg, paddingTop: 6 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.accentSoft,
+            borderRadius: radius.md,
+            padding: spacing.md,
+            marginBottom: 6,
+          }}>
+          <Icon name="shield" size={26} color={theme.accent} />
+          <View style={{ marginLeft: 12, flex: 1 }}>
+            <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800' }}>
+              {stats ? stats.blockedCount.toLocaleString('id-ID') : '—'} permintaan diblokir
+            </Text>
+            <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 2 }}>
+              iklan & pelacak di sesi ini • {stats ? stats.hosts.toLocaleString('id-ID') : '—'} host di daftar blokir
+            </Text>
+          </View>
+        </View>
+      </View>
+      <ToggleRow
+        theme={theme}
+        icon="shield"
+        title="Blokir iklan & pelacak"
+        subtitle={activeTab ? `Untuk ${host}` : '—'}
+        value={adblockOn}
+        onValueChange={(v) => {
+          if (host) {
+            dispatch({ type: 'SET_SITE_CONFIG', host, patch: { adblockEnabled: v } });
+          } else {
+            dispatch({ type: 'SET_SETTINGS', patch: { adblockEnabled: v } });
+          }
+        }}
+      />
+      <ToggleRow
+        theme={theme}
+        icon="code"
+        title="JavaScript"
+        subtitle={activeTab ? `Untuk ${host} (muat ulang diperlukan)` : '—'}
+        value={siteCfg?.javascriptEnabled !== false}
+        onValueChange={(v) => host && dispatch({ type: 'SET_SITE_CONFIG', host, patch: { javascriptEnabled: v } })}
+      />
+      <ToggleRow
+        theme={theme}
+        icon="lock"
+        title="Upgrade HTTPS"
+        subtitle="Muat ulang untuk menerapkan (ala Brave)"
+        value={siteCfg?.httpsUpgrades !== false && state.settings.httpsUpgrades}
+        onValueChange={(v) => host && dispatch({ type: 'SET_SITE_CONFIG', host, patch: { httpsUpgrades: v } })}
+      />
+      <Row
+        theme={theme}
+        icon="gear"
+        title="Semua pengaturan situs"
+        subtitle="UA, CSS kustom, dan lainnya"
+        onPress={() => {
+          setShieldsOpen(false);
+          dispatch({ type: 'SET_SCREEN', screen: 'siteSettings' });
+        }}
+        last
+      />
+    </Sheet>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
@@ -379,6 +522,55 @@ export function BrowserScreen() {
             ) : null}
           </>
         )}
+
+        {/* banner unduhan (Via) */}
+        {download ? (
+          <Pressable
+            onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'downloads' })}
+            style={{
+              position: 'absolute',
+              top: 6,
+              left: 10,
+              right: 10,
+              backgroundColor: theme.surface,
+              borderRadius: radius.md,
+              borderWidth: 1,
+              borderColor: theme.border,
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              elevation: 8,
+            }}>
+            <Icon name="download" size={18} color={theme.accent} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text numberOfLines={1} style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
+                {download.status === 'connecting' ? 'Menghubungkan…' : download.filename}
+              </Text>
+              <View style={{ height: 4, backgroundColor: theme.surface2, borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                <View
+                  style={{
+                    height: 4,
+                    width:
+                      download.total > 0
+                        ? `${Math.min(100, Math.round((download.done / download.total) * 100))}%`
+                        : '30%',
+                    backgroundColor: theme.accent,
+                    borderRadius: 2,
+                  }}
+                />
+              </View>
+              <Text style={{ color: theme.subtext, fontSize: 11, marginTop: 2 }}>
+                {download.total > 0
+                  ? `${(download.done / 1048576).toFixed(1)} / ${(download.total / 1048576).toFixed(1)} MB`
+                  : `${(download.done / 1048576).toFixed(1)} MB`}
+                {download.speed > 0 ? ` • ${(download.speed / 1048576).toFixed(1)} MB/s` : ''}
+                {' • multi-thread'}
+              </Text>
+            </View>
+            <Icon name="chevronRight" size={18} color={theme.subtext} />
+          </Pressable>
+        ) : null}
       </View>
 
       {!barTop ? bars : null}
@@ -391,30 +583,25 @@ export function BrowserScreen() {
             position: 'absolute',
             right: 14,
             bottom: Math.max(insets.bottom, 14) + 8,
-            width: 44,
-            height: 44,
-            borderRadius: 22,
+            width: 46,
+            height: 46,
+            borderRadius: 23,
             backgroundColor: theme.surface,
-            borderWidth: StyleSheet.hairlineWidth,
+            borderWidth: 1,
             borderColor: theme.border,
             alignItems: 'center',
             justifyContent: 'center',
             elevation: 6,
           }}>
-          <Icon name="eye" size={20} color={theme.accent} />
+          <Icon name="eye" size={21} color={theme.accent} />
         </Pressable>
       ) : null}
 
       {/* ---------- overlay ---------- */}
       <GlanceView theme={theme} />
       <TabSwitcher theme={theme} />
-      <ActionSheet
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        title="Menu"
-        actions={menuActions}
-        theme={theme}
-      />
+      {shieldsSheet}
+      <ActionSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title="Menu" actions={menuActions} theme={theme} />
       <ActionSheet
         visible={!!state.ui.linkMenu}
         onClose={() => dispatch({ type: 'SET_UI', patch: { linkMenu: null } })}
@@ -427,7 +614,7 @@ export function BrowserScreen() {
   );
 }
 
-// ---------------------------------------------------------------- awal
+// ---------------------------------------------------------------- awal (Zen: tanpa homepage)
 
 function StartOverlay() {
   const { state, dispatch, openNewTab } = useStore();
@@ -438,10 +625,14 @@ function StartOverlay() {
 
   const quickLinks = [
     { label: 'Google', url: 'https://www.google.com' },
+    { label: 'Brave', url: 'https://search.brave.com' },
     { label: 'DuckDuckGo', url: 'https://duckduckgo.com' },
     { label: 'Wikipedia', url: 'https://id.wikipedia.org' },
     { label: 'YouTube', url: 'https://m.youtube.com' },
   ];
+
+  const openOmnibox = () =>
+    dispatch({ type: 'SET_OMNIBOX', patch: { open: true, mode: 'new', initial: '', incognito: false } });
 
   return (
     <ScrollView
@@ -454,8 +645,8 @@ function StartOverlay() {
       }}>
       <View
         style={{
-          width: 76,
-          height: 76,
+          width: 78,
+          height: 78,
           borderRadius: 24,
           backgroundColor: theme.accentSoft,
           alignItems: 'center',
@@ -463,35 +654,34 @@ function StartOverlay() {
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: theme.accent,
         }}>
-        <Text style={{ fontSize: 34, fontWeight: '900', color: theme.accent }}>Z</Text>
+        <Text style={{ fontSize: 36, fontWeight: '900', color: theme.accent }}>Z</Text>
       </View>
       <View style={{ alignItems: 'center' }}>
-        <Text style={{ color: theme.text, fontSize: 22, fontWeight: '800' }}>{greeting}</Text>
-        <Text style={{ color: theme.subtext, fontSize: 13.5, marginTop: 4 }}>
-          Zenith Browser — cepat, ringan, privat
+        <Text style={{ color: theme.text, fontSize: 23, fontWeight: '800' }}>{greeting}</Text>
+        <Text style={{ color: theme.subtext, fontSize: 13.5, marginTop: 4, textAlign: 'center' }}>
+          Ketuk untuk mencari atau mengetik URL — ala Zen, tanpa halaman rumah
         </Text>
       </View>
 
       <Pressable
-        onPress={() =>
-          dispatch({ type: 'SET_OMNIBOX', patch: { open: true, mode: 'new', initial: '', incognito: false } })
-        }
+        onPress={openOmnibox}
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
           width: '100%',
-          maxWidth: 420,
+          maxWidth: 440,
           backgroundColor: pressed ? theme.surface2 : theme.surface,
           borderRadius: radius.pill,
           paddingHorizontal: 18,
-          height: 50,
+          height: 52,
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: theme.border,
+          elevation: 3,
         })}>
-        <Icon name="search" size={18} color={theme.subtext} />
-        <Text style={{ color: theme.subtext, fontSize: 15, marginLeft: 10 }}>
-          Cari atau ketik URL
-        </Text>
+        <Icon name="search" size={19} color={theme.subtext} />
+        <Text style={{ color: theme.subtext, fontSize: 15.5, marginLeft: 12 }}>Cari atau ketik URL</Text>
+        <View style={{ flex: 1 }} />
+        <Icon name="forward" size={16} color={theme.accent} />
       </Pressable>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
@@ -513,7 +703,7 @@ function StartOverlay() {
       </View>
 
       {state.bookmarks.length > 0 ? (
-        <View style={{ width: '100%', maxWidth: 420, marginTop: spacing.sm }}>
+        <View style={{ width: '100%', maxWidth: 440, marginTop: spacing.sm }}>
           <Text
             style={{
               color: theme.subtext,

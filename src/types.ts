@@ -4,6 +4,7 @@ export type Screen =
   | 'scripts'
   | 'extensions'
   | 'siteSettings'
+  | 'downloads'
   | 'about';
 
 export interface Workspace {
@@ -94,6 +95,7 @@ export interface SiteConfig {
   adblockEnabled?: boolean; // false = host masuk allowlist
   userAgent?: string; // '' = bawaan
   customCss?: string;
+  httpsUpgrades?: boolean; // false = jangan paksa https utk situs ini
 }
 
 export interface Settings {
@@ -103,7 +105,10 @@ export interface Settings {
   defaultEngineId: string;
   engines: SearchEngine[];
   searchSuggestions: boolean;
+  recentSearches: string[]; // ala Zen: pencarian terakhir muncul di omnibox
   adblockEnabled: boolean;
+  httpsUpgrades: boolean; // ala Brave: paksa https://
+  fastDownloads: boolean; // ala Via: unduhan multi-thread
   customCss: string; // CSS global (userstyle ala Via)
   homepage: string; // '' = overlay awal
 }

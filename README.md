@@ -2,7 +2,7 @@
 
 # 🅧 Zenith Browser
 
-**Browser Android ringan bergaya [Zen](https://github.com/zen-browser/docs) — dengan skrip ala [Via](https://github.com/tuyafeng/Via) dan ekstensi ala [Kiwi](https://github.com/kiwibrowser/src.next) — dibangun dengan Rust + React Native.**
+**Browser Android ringan bergaya [Zen](https://github.com/zen-browser/docs) — dengan skrip ala [Via](https://github.com/tuyafeng/Via), ekstensi ala [Kiwi](https://github.com/kiwibrowser/src.next), dan shields ala [Brave](https://github.com/brave/brave-browser) — dibangun dengan Rust + React Native.**
 
 `Rust Core (JNI)` · `React Native UI` · `WebView Android` · `Android 7.0 → 16+`
 
@@ -67,7 +67,9 @@ Zenith menggabungkan tiga filosofi browser ke satu aplikasi Android native yang 
 - **Pemblokir iklan level jaringan** — daftar hosts bawaan (aman, terkurasi) + impor daftar besar (StevenBlack/adAway) dari URL; allowlist per situs; statistik jumlah blokir; diblokir di `shouldInterceptRequest` (Kotlin→Rust) — bukan sekadar CSS.
 - **Pengaturan situs ala Via** — per host: matikan JavaScript, matikan pemblokir, UA desktop/kustom, CSS kustom (userstyle).
 - **Mesin pencari kustom ala Zen** — URL templat `%s` + URL saran; Google/DuckDuckGo/Bing/Wikipedia ID bawaan.
-- **Tab privat** 🕶, bookmark, riwayat (500 entri), sesi dipulihkan otomatis, tema gelap/terang/sistem, bar bawah (Via) atau atas (Zen).
+- **Unduhan cepat ala Via** — mesin unduhan **multi-thread (4 koneksi + Range paralel)** di Kotlin: banner progres + kecepatan langsung di browser, layar Unduhan (mulai dari URL, batal, buka, bagikan, hapus), fallback opsional ke DownloadManager sistem.
+- **Shields ala Brave** — tombol perisai dengan **penghitung blokir real-time**, panel per-situs (blokir iklan, JavaScript, HTTPS), **upgrade HTTPS otomatis** (http → https), dan mesin pencari **Brave Search** bawaan.
+- **Tab privat** 🕶, bookmark, riwayat (500 entri), pencarian terakhir di omnibox, sesi dipulihkan otomatis, tema gelap/terang/sistem, bar bawah (Via) atau atas (Zen).
 - **Android 7.0 (API 24) → Android 16/17 (API 36/37)** — satu APK universal 4 ABI.
 
 ## 📂 Struktur proyek
@@ -105,8 +107,8 @@ Unduh APK langsung dari **[GitHub Releases](https://github.com/ahyat786/Zenith-A
 
 | Properti | Nilai |
 | --- | --- |
-| Rilis terkini | [v0.1.1](https://github.com/ahyat786/Zenith-App/releases/latest) (`Zenith-v0.1.1-android.apk`, universal, ±70 MB) |
-| Paket | `com.zenith.browser` v0.1.1 (versionCode 2) |
+| Rilis terkini | [v0.2.0](https://github.com/ahyat786/Zenith-App/releases/latest) (`Zenith-v0.2.0-android.apk`, universal, ±70 MB) |
+| Paket | `com.zenith.browser` v0.2.0 (versionCode 3) |
 | Kompatibilitas | **Android 7.0 (API 24) → Android 16/17 (API 36/37)** |
 | ABI | arm64-v8a, armeabi-v7a, x86, x86_64 |
 | Engine JS | Hermes |
@@ -199,12 +201,14 @@ Zenith berdiri di atas bahu tiga proyek open-source berikut — **semua kredit u
 | 🌙 **Zen Browser** (docs) | [github.com/zen-browser/docs](https://github.com/zen-browser/docs) | Konsep & desain UX: workspaces, compact mode, split view, glance, omnibox mengambang, pengelola mesin pencari |
 | ⚡ **Via Browser** | [github.com/tuyafeng/Via](https://github.com/tuyafeng/Via) | Format userscript (Greasy Fork), pengaturan per-situs, filosofi browser ringan tanpa iklan |
 | 🥝 **Kiwi Browser** (src.next) | [github.com/kiwibrowser/src.next](https://github.com/kiwibrowser/src.next) | Model dukungan ekstensi Chrome (parsing manifest MV2/MV3 + content scripts) |
+| 🦁 **Brave Browser** | [github.com/brave/brave-browser](https://github.com/brave/brave-browser) | Shields per-situs, penghitung blokir, upgrade HTTPS, Brave Search |
 
 **Built with 🩷 [Pistis Litae](https://github.com/ahyat786)** — penggabungan ketiganya dalam Rust + React Native.
 
 - [Zen Browser docs](https://github.com/zen-browser/docs) — docs berlisensi repo masing-masing.
 - [Via Browser](https://github.com/tuyafeng/Via) © Yafeng Tu.
 - [Kiwi Browser src.next](https://github.com/kiwibrowser/src.next).
+- [Brave Browser](https://github.com/brave/brave-browser) — Shields & HTTPS-upgrade.
 - Kode Zenith: **MIT** (lihat [LICENSE](./LICENSE)).
 
 Zenith adalah proyek independen dan bukan produk resmi Zen/Via/Kiwi.

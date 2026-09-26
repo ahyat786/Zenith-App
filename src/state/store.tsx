@@ -29,6 +29,7 @@ import type {
 } from '../types';
 import { DEFAULT_ENGINES, DEFAULT_SETTINGS, DEFAULT_WORKSPACES, uid } from './defaults';
 import { adblockAllowHost, adblockInit, adblockSetEnabled, expandSearch, normalizeInput } from '../core/native';
+import { setFastDownloadsEnabled } from '../core/downloads';
 
 const STATE_KEY = 'zenith.state.v1';
 
@@ -104,6 +105,7 @@ type Action =
   | { type: 'ADD_BOOKMARK'; bookmark: Bookmark }
   | { type: 'DEL_BOOKMARK'; id: string }
   | { type: 'SET_SETTINGS'; patch: Partial<Settings> }
+  | { type: 'ADD_RECENT_SEARCH'; query: string }
   | { type: 'SET_SITE_CONFIG'; host: string; patch: Partial<SiteConfig> }
   | { type: 'DEL_SITE_CONFIG'; host: string }
   | { type: 'SET_USER_BLOCKLIST'; text: string }
@@ -124,12 +126,18 @@ function reducer(state: AppState, action: Action): AppState {
             ? p.settings.engines
             : DEFAULT_ENGINES,
       };
+      // Rekonsiliasi: workspace aktif harus mengikuti tab aktif (bug fix)
+      const tabs = p.tabs ?? [];
+      const activeTab = tabs.find((t) => t.id === p.activeTabId) ?? null;
+      const activeWorkspaceId = activeTab
+        ? activeTab.workspaceId
+        : (p.activeWorkspaceId ?? DEFAULT_WORKSPACES[0].id);
       return {
         ...state,
         settings,
         workspaces: p.workspaces?.length ? p.workspaces : DEFAULT_WORKSPACES,
-        activeWorkspaceId: p.activeWorkspaceId ?? DEFAULT_WORKSPACES[0].id,
-        tabs: p.tabs ?? [],
+        activeWorkspaceId,
+        tabs,
         activeTabId: p.activeTabId ?? null,
         scripts: p.scripts ?? [],
         extensions: p.extensions ?? [],
@@ -305,6 +313,14 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, bookmarks: state.bookmarks.filter((b) => b.id !== action.id) };
     case 'SET_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.patch } };
+    case 'ADD_RECENT_SEARCH': {
+      const q = action.query.trim();
+      if (!q) {
+        return state;
+      }
+      const recentSearches = [q, ...state.settings.recentSearches.filter((x) => x !== q)].slice(0, 10);
+      return { ...state, settings: { ...state.settings, recentSearches } };
+    }
     case 'SET_SITE_CONFIG': {
       const current = state.siteConfigs[action.host] ?? { host: action.host };
       const merged: SiteConfig = { ...current, ...action.patch, host: action.host };
@@ -398,6 +414,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     adblockSetEnabled(state.settings.adblockEnabled);
   }, [state.settings.adblockEnabled]);
+
+  // ---- unduhan cepat (Via) aktif/nonaktif
+  useEffect(() => {
+    setFastDownloadsEnabled(state.settings.fastDownloads);
+  }, [state.settings.fastDownloads]);
 
   useEffect(() => {
     let cancelled = false;

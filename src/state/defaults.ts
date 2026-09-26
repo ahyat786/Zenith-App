@@ -23,6 +23,13 @@ export const DEFAULT_ENGINES: SearchEngine[] = [
     builtin: true,
   },
   {
+    id: 'brave',
+    name: 'Brave Search',
+    urlTemplate: 'https://search.brave.com/search?q=%s',
+    suggestUrl: 'https://search.brave.com/api/suggest?q=%s',
+    builtin: true,
+  },
+  {
     id: 'wikipedia-id',
     name: 'Wikipedia (ID)',
     urlTemplate: 'https://id.wikipedia.org/w/index.php?search=%s',
@@ -38,7 +45,10 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultEngineId: 'google',
   engines: DEFAULT_ENGINES,
   searchSuggestions: true,
+  recentSearches: [],
   adblockEnabled: true,
+  httpsUpgrades: true,
+  fastDownloads: true,
   customCss: '',
   homepage: '',
 };

@@ -180,14 +180,39 @@ export function TabView({ tab, active, theme }: Props) {
     [tab.id, tab.url, tab.title, tab.canGoBack, tab.canGoForward, tab.loading, tab.incognito, dispatch],
   );
 
-  const shouldStartLoadWithRequest = useCallback((req: WebViewNavigation) => {
-    const url = req.url || '';
-    if (/^(mailto|tel|sms|geo|market|intent):/i.test(url)) {
-      Linking.openURL(url).catch(() => {});
-      return false;
-    }
-    return true;
-  }, []);
+  const upgradedRef = useRef<Set<string>>(new Set());
+  const shouldStartLoadWithRequest = useCallback(
+    (req: WebViewNavigation) => {
+      const url = req.url || '';
+      if (/^(mailto|tel|sms|geo|market|intent):/i.test(url)) {
+        Linking.openURL(url).catch(() => {});
+        return false;
+      }
+      // Brave: paksa https:// untuk frame utama (sekali per URL; host lokal lolos)
+      if (
+        req.isMainFrame !== false &&
+        state.settings.httpsUpgrades &&
+        siteCfg?.httpsUpgrades !== false &&
+        url.startsWith('http://') &&
+        !/^http:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.)/i.test(url)
+      ) {
+        if (!upgradedRef.current.has(url)) {
+          if (upgradedRef.current.size > 200) {
+            upgradedRef.current.clear();
+          }
+          upgradedRef.current.add(url);
+          const httpsUrl = 'https://' + url.slice(7);
+          const wv = webviewRefs.get(tab.id);
+          if (wv) {
+            wv.injectJavaScript(`location.replace(${JSON.stringify(httpsUrl)});true;`);
+            return false;
+          }
+        }
+      }
+      return true;
+    },
+    [state.settings.httpsUpgrades, siteCfg, tab.id],
+  );
 
   const onProgress = useCallback(
     (e: { nativeEvent: { progress: number } }) => {
