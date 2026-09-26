@@ -11,6 +11,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { Linking, Text, View } from 'react-native';
 import { WebView as WebViewComponent, type WebViewNavigation } from 'react-native-webview';
+import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 
 /** Tipe props react-native-webview v14 belum kompatibel penuh dengan React 19 —
  *  cast ke any; runtime tetap memakai komponen yang sama. */
@@ -182,7 +183,7 @@ export function TabView({ tab, active, theme }: Props) {
 
   const upgradedRef = useRef<Set<string>>(new Set());
   const shouldStartLoadWithRequest = useCallback(
-    (req: WebViewNavigation) => {
+    (req: ShouldStartLoadRequest) => {
       const url = req.url || '';
       if (/^(mailto|tel|sms|geo|market|intent):/i.test(url)) {
         Linking.openURL(url).catch(() => {});
@@ -190,7 +191,7 @@ export function TabView({ tab, active, theme }: Props) {
       }
       // Brave: paksa https:// untuk frame utama (sekali per URL; host lokal lolos)
       if (
-        req.isMainFrame !== false &&
+        req.isTopFrame &&
         state.settings.httpsUpgrades &&
         siteCfg?.httpsUpgrades !== false &&
         url.startsWith('http://') &&
