@@ -40,7 +40,7 @@ export function AboutScreen() {
         </View>
         <Text style={{ color: theme.text, fontSize: 20, fontWeight: '800' }}>Zenith Browser</Text>
         <Text style={{ color: theme.subtext, fontSize: 13 }}>
-          v0.1.0 • Rust + React Native • Android 7.0+
+          v0.1.1 • Rust + React Native • Android 7.0+
         </Text>
         <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 4, textAlign: 'center', lineHeight: 18 }}>
           Browser ringan bergaya Zen dengan skrip ala Via dan\nekstensi ala Kiwi. Tanpa telemetri.

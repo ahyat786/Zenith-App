@@ -101,22 +101,47 @@ Zenith/
 
 ## 📦 Rilis
 
-APK hasil build ada di **`releases/Zenith-v0.1.0-android.apk`** (universal, 4 ABI, ±71 MB):
+Unduh APK langsung dari **[GitHub Releases](https://github.com/ahyat786/Zenith-App/releases)** — dikompilasi otomatis oleh GitHub Actions:
 
 | Properti | Nilai |
 | --- | --- |
-| Paket | `com.zenith.browser` v0.1.0 (versionCode 1) |
+| Rilis terkini | [v0.1.1](https://github.com/ahyat786/Zenith-App/releases/latest) (`Zenith-v0.1.1-android.apk`, universal, ±70 MB) |
+| Paket | `com.zenith.browser` v0.1.1 (versionCode 2) |
 | Kompatibilitas | **Android 7.0 (API 24) → Android 16/17 (API 36/37)** |
 | ABI | arm64-v8a, armeabi-v7a, x86, x86_64 |
 | Engine JS | Hermes |
 | Inti Rust | `libzenith_core.so` (1.3–2.2 MB per ABI) |
-| Tanda tangan | Debug key (untuk rilis publik, buat keystore sendiri) |
+| Tanda tangan | **Kunci rilis** (dari GitHub Secrets, diverifikasi `apksigner` di CI) |
 
-**Instal:** salin APK ke ponsel → buka → izinkan "instal dari sumber tidak dikenal" → selesai.
-Atau via ADB: `adb install releases/Zenith-v0.1.0-android.apk`
+**Instal:** unduh APK → buka → izinkan "instal dari sumber tidak dikenal" → selesai.
+Atau via ADB: `adb install Zenith-v0.1.1-android.apk`
 
 > Ingin APK lebih kecil (~30 MB)? Batasi ABI di `android/gradle.properties`:
 > `reactNativeArchitectures=arm64-v8a,armeabi-v7a` lalu build ulang.
+
+## 🔐 Keamanan & penandatanganan
+
+**Tidak ada kunci, token, atau password yang di-commit ke repo ini.**
+
+Penandatanganan rilis memakai 4 [GitHub Secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions) (terenkripsi, *write-only*):
+
+| Secret | Isi |
+| --- | --- |
+| `ZENITH_KEYSTORE_BASE64` | Keystore PKCS12 (base64) — kunci rilis RSA-4096 |
+| `ZENITH_KEYSTORE_PASSWORD` | Password keystore |
+| `ZENITH_KEYSTORE_ALIAS` | Alias kunci (`zenith`) |
+| `ZENITH_KEY_PASSWORD` | Password kunci |
+
+Alurnya: CI me-decode secret → file sementara → Gradle menandatangani via env `ZENITH_KEYSTORE_*` →
+`apksigner verify` mencetak sertifikat di log sebagai bukti. Build lokal tanpa env tersebut
+otomatis fallback ke debug key (pengembangan).
+
+**Rotasi kunci / ganti keystore:** jalankan `scripts/generate-release-keystore.sh`, lalu perbarui
+keempat secret di GitHub (Settings → Secrets and variables → Actions). Simpan keystore +
+password di password manager — GitHub Secrets tidak bisa dibaca ulang setelah disimpan.
+
+**Hygiene token:** jangan pernah menaruh token akses di kode/perintah git. Jika token sempat
+terpapar, segera *revoke* di GitHub → Settings → Developer settings → Fine-grained tokens.
 
 ## 🔨 Build
 

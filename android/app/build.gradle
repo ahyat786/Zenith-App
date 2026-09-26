@@ -82,8 +82,8 @@ android {
         applicationId "com.zenith.browser"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "0.1.0"
+        versionCode 2
+        versionName "0.1.1"
     }
     signingConfigs {
         debug {
@@ -92,15 +92,32 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // Kunci rilis dari GitHub Secrets (dilewatkan CI via env).
+        // Bila env tidak ada (build lokal), otomatis fallback ke debug key.
+        release {
+            def ksFile = System.getenv("ZENITH_KEYSTORE_FILE")
+            def ksPass = System.getenv("ZENITH_KEYSTORE_PASSWORD")
+            def ksAlias = System.getenv("ZENITH_KEYSTORE_ALIAS")
+            def ksKeyPass = System.getenv("ZENITH_KEY_PASSWORD")
+            if (ksFile != null && new File(ksFile).exists() && ksPass != null) {
+                storeFile file(ksFile)
+                storePassword ksPass
+                keyAlias ksAlias
+                keyPassword ksKeyPass != null ? ksKeyPass : ksPass
+            } else {
+                storeFile file('debug.keystore')
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }

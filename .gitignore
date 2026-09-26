@@ -81,3 +81,6 @@ android/app/src/main/jniLibs/
 rust/target/
 /releases/
 *.hprof
+
+# Zenith: backup kunci rilis — JANGAN di-commit
+secrets-backup/
