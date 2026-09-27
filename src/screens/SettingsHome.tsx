@@ -89,9 +89,9 @@ export function SettingsHome({
           <Icon name="user" size={24} color="#fff" />
         </View>
         <View style={{ marginLeft: 14, flex: 1 }}>
-          <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>Di perangkat ini</Text>
+          <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>Profil</Text>
           <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 3, lineHeight: 18 }}>
-            Markah, riwayat, dan unduhan tidak disinkronkan. Tidak ada akun.
+            Akun terpisah di perangkat ini. Tab tiap profil tetap tersimpan.
           </Text>
         </View>
       </Pressable>

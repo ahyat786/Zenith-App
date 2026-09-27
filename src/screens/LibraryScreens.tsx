@@ -3,13 +3,14 @@
  * Sandi dan akun jujur: Zenith tidak menyimpan sandi dan tidak punya sinkronisasi.
  */
 
-import React from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import { hostOfUrl, useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
-import { ListSection, Row } from '../ui/kit';
+import { Button, ListSection, Row } from '../ui/kit';
 import type { HistoryItem } from '../types';
+import { PROFILE_COLORS, uid } from '../state/defaults';
 
 function dayLabel(at: number): string {
   const d = new Date(at);
@@ -153,15 +154,146 @@ export function PasswordsScreen() {
 }
 
 export function AccountScreen() {
-  const { state, dispatch } = useStore();
+  const { state, fullState, dispatch, switchProfile } = useStore();
   const theme = useTheme(state.settings.theme);
+  const [name, setName] = useState('');
+  const [rename, setRename] = useState('');
+  const active = state.profiles.find((p) => p.id === state.activeProfileId) ?? state.profiles[0];
+
+  const counts = (id: string) => ({
+    tabs: fullState.tabs.filter((t) => t.profileId === id).length,
+    history: fullState.history.filter((h) => h.profileId === id).length,
+  });
+
+  const create = async () => {
+    const label = name.trim();
+    if (!label) {
+      Alert.alert('Nama kosong', 'Beri nama profil, misalnya Kerja atau Sekolah.');
+      return;
+    }
+    const id = uid('profile-');
+    const color = PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length];
+    dispatch({ type: 'ADD_PROFILE', id, name: label, color });
+    setName('');
+    await switchProfile(id);
+  };
+
   return (
-    <ScreenShell title="Masuk" onBack={() => dispatch({ type: 'SET_SCREEN', screen: 'browser' })} theme={theme}>
-      <View style={{ padding: spacing.lg, gap: 10 }}>
-        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>Tidak ada akun</Text>
-        <Text style={{ color: theme.subtext, fontSize: 14.5, lineHeight: 21 }}>
-          Markah, riwayat, ekstensi, dan pengaturan tetap di perangkat ini. Zenith tidak punya sinkronisasi dan tidak memakai akun. Tidak ada telemetri.
+    <ScreenShell title="Profil" onBack={() => dispatch({ type: 'SET_SCREEN', screen: 'browser' })} theme={theme}>
+      <View style={{ padding: spacing.lg, paddingBottom: 4 }}>
+        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>Profil terpisah, di perangkat ini</Text>
+        <Text style={{ color: theme.subtext, fontSize: 13.5, lineHeight: 20, marginTop: 6 }}>
+          Setiap profil punya tab, riwayat, markah, skrip, ekstensi, dan kuki sendiri. Pindah profil tidak
+          menghapus tab yang sedang terbuka — semuanya tetap tersimpan.
         </Text>
+      </View>
+      {state.profiles.map((p) => {
+        const n = counts(p.id);
+        const on = p.id === state.activeProfileId;
+        return (
+          <Pressable
+            key={p.id}
+            onPress={() => switchProfile(p.id)}
+            style={{
+              marginHorizontal: spacing.md,
+              marginTop: 10,
+              backgroundColor: theme.surface,
+              borderRadius: 16,
+              padding: 14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: on ? p.color : theme.border,
+            }}>
+            <View
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 21,
+                backgroundColor: p.color,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{p.name.slice(0, 1).toUpperCase()}</Text>
+            </View>
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>{p.name}</Text>
+              <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 2 }}>
+                {n.tabs} tab tersimpan · {n.history} riwayat{on ? ' · sedang dipakai' : ''}
+              </Text>
+            </View>
+            {on ? <Text style={{ color: p.color, fontWeight: '800', fontSize: 12 }}>AKTIF</Text> : null}
+          </Pressable>
+        );
+      })}
+      <View style={{ padding: spacing.lg, gap: 10 }}>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Nama profil baru"
+          placeholderTextColor={theme.subtext}
+          style={{
+            backgroundColor: theme.surface,
+            color: theme.text,
+            borderRadius: 12,
+            paddingHorizontal: 14,
+            height: 46,
+            fontSize: 15,
+          }}
+        />
+        <Button label="Buat profil dan pindah" theme={theme} onPress={create} />
+        {active ? (
+          <>
+            <TextInput
+              value={rename}
+              onChangeText={setRename}
+              placeholder={`Ubah nama “${active.name}”`}
+              placeholderTextColor={theme.subtext}
+              style={{
+                backgroundColor: theme.surface,
+                color: theme.text,
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                height: 46,
+                fontSize: 15,
+              }}
+            />
+            <Button
+              label="Simpan nama"
+              kind="secondary"
+              theme={theme}
+              onPress={() => {
+                const label = rename.trim();
+                if (!label) {
+                  return;
+                }
+                dispatch({ type: 'UPDATE_PROFILE', id: active.id, patch: { name: label } });
+                setRename('');
+              }}
+            />
+          </>
+        ) : null}
+        {state.profiles.length > 1 && active ? (
+          <Button
+            label={`Hapus profil ${active.name}`}
+            kind="danger"
+            theme={theme}
+            onPress={() =>
+              Alert.alert(
+                `Hapus ${active.name}?`,
+                'Tab, riwayat, dan markah profil ini ikut terhapus. Profil lain tidak tersentuh.',
+                [
+                  { text: 'Batal', style: 'cancel' },
+                  {
+                    text: 'Hapus',
+                    style: 'destructive',
+                    onPress: () => dispatch({ type: 'DELETE_PROFILE', id: active.id }),
+                  },
+                ],
+              )
+            }
+          />
+        ) : null}
       </View>
     </ScreenShell>
   );

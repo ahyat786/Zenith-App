@@ -16,10 +16,12 @@ import React, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   Bookmark,
+  BrowserProfile,
   Extension,
   TabGroup,
   HistoryItem,
   OmniboxState,
+  ProfileFocus,
   Screen,
   Settings,
   SiteConfig,
@@ -28,7 +30,16 @@ import type {
   UserScript,
   Workspace,
 } from '../types';
-import { DEFAULT_ENGINES, DEFAULT_SETTINGS, DEFAULT_WORKSPACES, uid } from './defaults';
+import {
+  DEFAULT_ENGINES,
+  DEFAULT_PROFILE,
+  DEFAULT_PROFILE_ID,
+  DEFAULT_SETTINGS,
+  DEFAULT_WORKSPACES,
+  uid,
+  workspacesForProfile,
+} from './defaults';
+import { setActiveBrowserProfile } from '../core/native';
 import { adblockAllowHost, adblockInit, adblockSetEnabled, expandSearch, normalizeInput } from '../core/native';
 import { setFastDownloadsEnabled } from '../core/downloads';
 
@@ -37,6 +48,10 @@ const STATE_KEY = 'zenith.state.v1';
 export interface AppState {
   hydrated: boolean;
   settings: Settings;
+  profiles: BrowserProfile[];
+  activeProfileId: string;
+  profileFocus: Record<string, ProfileFocus>;
+  recentByProfile: Record<string, string[]>;
   workspaces: Workspace[];
   activeWorkspaceId: string;
   tabs: Tab[];
@@ -64,6 +79,10 @@ const initialUi: UiState = {
 const initialState: AppState = {
   hydrated: false,
   settings: DEFAULT_SETTINGS,
+  profiles: [DEFAULT_PROFILE],
+  activeProfileId: DEFAULT_PROFILE_ID,
+  profileFocus: {},
+  recentByProfile: { [DEFAULT_PROFILE_ID]: [] },
   workspaces: DEFAULT_WORKSPACES,
   activeWorkspaceId: DEFAULT_WORKSPACES[0].id,
   tabs: [],
@@ -78,6 +97,38 @@ const initialState: AppState = {
   userBlocklist: '',
   ui: initialUi,
 };
+
+function siteKey(profileId: string, host: string): string {
+  return `${profileId}::${host}`;
+}
+
+function projectState(state: AppState): AppState {
+  const pid = state.activeProfileId || DEFAULT_PROFILE_ID;
+  const siteConfigs: Record<string, SiteConfig> = {};
+  for (const [key, cfg] of Object.entries(state.siteConfigs)) {
+    const owner = cfg.profileId || DEFAULT_PROFILE_ID;
+    if (owner !== pid) {
+      continue;
+    }
+    const host = cfg.host || key.split('::').pop() || key;
+    siteConfigs[host] = cfg;
+  }
+  return {
+    ...state,
+    tabs: state.tabs.filter((t) => (t.profileId || DEFAULT_PROFILE_ID) === pid),
+    workspaces: state.workspaces.filter((w) => (w.profileId || DEFAULT_PROFILE_ID) === pid),
+    tabGroups: state.tabGroups.filter((g) => (g.profileId || DEFAULT_PROFILE_ID) === pid),
+    scripts: state.scripts.filter((s) => (s.profileId || DEFAULT_PROFILE_ID) === pid),
+    extensions: state.extensions.filter((e) => (e.profileId || DEFAULT_PROFILE_ID) === pid),
+    history: state.history.filter((h) => (h.profileId || DEFAULT_PROFILE_ID) === pid),
+    bookmarks: state.bookmarks.filter((b) => (b.profileId || DEFAULT_PROFILE_ID) === pid),
+    siteConfigs,
+    settings: {
+      ...state.settings,
+      recentSearches: state.recentByProfile[pid] ?? [],
+    },
+  };
+}
 
 type Action =
   | { type: 'HYDRATE'; state: Partial<AppState> | null }
@@ -117,6 +168,10 @@ type Action =
   | { type: 'SET_SITE_CONFIG'; host: string; patch: Partial<SiteConfig> }
   | { type: 'DEL_SITE_CONFIG'; host: string }
   | { type: 'SET_USER_BLOCKLIST'; text: string }
+  | { type: 'ADD_PROFILE'; id: string; name: string; color: string }
+  | { type: 'UPDATE_PROFILE'; id: string; patch: Partial<BrowserProfile> }
+  | { type: 'DELETE_PROFILE'; id: string }
+  | { type: 'SWITCH_PROFILE'; id: string }
   | { type: 'RESET_ALL' };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -137,28 +192,47 @@ function reducer(state: AppState, action: Action): AppState {
       };
       // Rekonsiliasi: tab aktif harus valid; kalau tidak, pakai tab pertama.
       // (bug v0.2: activeTabId basi → semua tombol bar bawah disabled)
-      const tabs = p.tabs ?? [];
-      let activeTab = tabs.find((t) => t.id === p.activeTabId) ?? null;
-      if (!activeTab && tabs.length > 0) {
-        activeTab = tabs[0];
-      }
+      const profiles = p.profiles?.length ? p.profiles : [DEFAULT_PROFILE];
+      const activeProfileId = profiles.some((x) => x.id === p.activeProfileId)
+        ? (p.activeProfileId as string)
+        : profiles[0].id;
+      const stamp = <T extends { profileId?: string }>(items: T[] | undefined): T[] =>
+        (items ?? []).map((item) => (item.profileId ? item : { ...item, profileId: DEFAULT_PROFILE_ID }));
+      const tabs = stamp(p.tabs);
+      const workspaces = stamp(p.workspaces?.length ? p.workspaces : DEFAULT_WORKSPACES);
+      const profileTabs = tabs.filter((t) => t.profileId === activeProfileId);
+      let activeTab = profileTabs.find((t) => t.id === p.activeTabId) ?? profileTabs[0] ?? null;
       const activeTabId = activeTab ? activeTab.id : null;
       const activeWorkspaceId = activeTab
         ? activeTab.workspaceId
-        : (p.activeWorkspaceId ?? DEFAULT_WORKSPACES[0].id);
+        : (workspaces.find((w) => w.profileId === activeProfileId)?.id ?? DEFAULT_WORKSPACES[0].id);
+      const siteConfigs: Record<string, SiteConfig> = {};
+      for (const [key, cfg] of Object.entries(p.siteConfigs ?? {})) {
+        const owner = cfg.profileId || DEFAULT_PROFILE_ID;
+        const host = cfg.host || key.split('::').pop() || key;
+        siteConfigs[siteKey(owner, host)] = { ...cfg, host, profileId: owner };
+      }
+      const recentByProfile = { ...(p.recentByProfile ?? {}) };
+      if (!recentByProfile[DEFAULT_PROFILE_ID]) {
+        recentByProfile[DEFAULT_PROFILE_ID] = p.settings?.recentSearches ?? [];
+      }
       return {
         ...state,
         settings,
-        workspaces: p.workspaces?.length ? p.workspaces : DEFAULT_WORKSPACES,
+        profiles,
+        activeProfileId,
+        profileFocus: p.profileFocus ?? {},
+        recentByProfile,
+        workspaces,
         activeWorkspaceId,
         activeTabId,
-        tabGroups: p.tabGroups ?? [],
+        tabGroups: stamp(p.tabGroups),
         tabs,
-        scripts: p.scripts ?? [],
-        extensions: p.extensions ?? [],
-        history: p.history ?? [],
-        bookmarks: p.bookmarks ?? [],
-        siteConfigs: p.siteConfigs ?? {},
+        scripts: stamp(p.scripts),
+        extensions: stamp(p.extensions),
+        history: stamp(p.history),
+        bookmarks: stamp(p.bookmarks),
+        siteConfigs,
         userBlocklist: p.userBlocklist ?? '',
         splitTabIds: [],
         ui: initialUi,
@@ -189,6 +263,7 @@ function reducer(state: AppState, action: Action): AppState {
         url: action.url,
         title: '',
         workspaceId: action.workspaceId ?? state.activeWorkspaceId,
+        profileId: state.activeProfileId,
         groupId: pendingGroup,
         incognito: !!action.incognito,
         canGoBack: false,
@@ -215,14 +290,11 @@ function reducer(state: AppState, action: Action): AppState {
       const splitTabIds = state.splitTabIds.filter((id) => id !== action.id);
       let activeTabId = state.activeTabId;
       if (state.activeTabId === action.id) {
-        const next =
-          tabs.filter((t) => t.workspaceId === state.tabs[idx].workspaceId)[0] ?? null;
-        const neighbor =
-          tabs
-            .slice(0, idx)
-            .reverse()
-            .find((t) => t.workspaceId === state.tabs[idx].workspaceId) ??
-          next;
+        const closed = state.tabs[idx];
+        const same = (t: Tab) =>
+          t.profileId === closed.profileId && t.workspaceId === closed.workspaceId;
+        const next = tabs.find(same) ?? null;
+        const neighbor = tabs.slice(0, idx).reverse().find(same) ?? next;
         activeTabId = neighbor ? neighbor.id : null;
       }
       return { ...state, tabs, splitTabIds, activeTabId };
@@ -233,12 +305,16 @@ function reducer(state: AppState, action: Action): AppState {
         return state;
       }
       const tabs = state.tabs.filter(
-        (t) => t.id === action.keepId || t.workspaceId !== keep.workspaceId,
+        (t) => t.id === action.keepId || t.profileId !== keep.profileId || t.workspaceId !== keep.workspaceId,
       );
       return { ...state, tabs, activeTabId: keep.id };
     }
     case 'CLOSE_ALL_TABS':
-      return { ...state, tabs: [], activeTabId: null };
+      return {
+        ...state,
+        tabs: state.tabs.filter((t) => t.profileId !== state.activeProfileId),
+        activeTabId: null,
+      };
     case 'SET_ACTIVE_TAB':
       return {
         ...state,
@@ -266,7 +342,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         tabGroups: [
           ...state.tabGroups,
-          { id: action.id, name: action.name, color: action.color, createdAt: Date.now() },
+          { id: action.id, name: action.name, color: action.color, createdAt: Date.now(), profileId: state.activeProfileId },
         ],
       };
     case 'UPDATE_GROUP':
@@ -292,7 +368,8 @@ function reducer(state: AppState, action: Action): AppState {
         ),
       };
     case 'SET_ACTIVE_WORKSPACE': {
-      const first = state.tabs.find((t) => t.workspaceId === action.id) ?? null;
+      const first =
+        state.tabs.find((t) => t.workspaceId === action.id && t.profileId === state.activeProfileId) ?? null;
       return {
         ...state,
         activeWorkspaceId: action.id,
@@ -302,7 +379,10 @@ function reducer(state: AppState, action: Action): AppState {
     case 'ADD_WORKSPACE':
       return {
         ...state,
-        workspaces: [...state.workspaces, { id: action.id, name: action.name, icon: action.icon }],
+        workspaces: [
+          ...state.workspaces,
+          { id: action.id, name: action.name, icon: action.icon, profileId: state.activeProfileId },
+        ],
       };
     case 'UPDATE_WORKSPACE':
       return {
@@ -312,13 +392,16 @@ function reducer(state: AppState, action: Action): AppState {
         ),
       };
     case 'DEL_WORKSPACE': {
-      if (state.workspaces.length <= 1) {
+      const mine = state.workspaces.filter((w) => w.profileId === state.activeProfileId);
+      if (mine.length <= 1) {
         return state;
       }
       const workspaces = state.workspaces.filter((w) => w.id !== action.id);
-      const fallback = workspaces[0];
+      const fallback = workspaces.find((w) => w.profileId === state.activeProfileId) ?? mine[0];
       const tabs = state.tabs.map((t) =>
-        t.workspaceId === action.id ? { ...t, workspaceId: fallback.id } : t,
+        t.workspaceId === action.id && t.profileId === state.activeProfileId
+          ? { ...t, workspaceId: fallback.id }
+          : t,
       );
       return {
         ...state,
@@ -329,7 +412,10 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
     case 'ADD_SCRIPT':
-      return { ...state, scripts: [...state.scripts, action.script] };
+      return {
+        ...state,
+        scripts: [...state.scripts, { ...action.script, profileId: action.script.profileId || state.activeProfileId }],
+      };
     case 'UPDATE_SCRIPT':
       return {
         ...state,
@@ -340,18 +426,29 @@ function reducer(state: AppState, action: Action): AppState {
     case 'DEL_SCRIPT':
       return { ...state, scripts: state.scripts.filter((s) => s.id !== action.id) };
     case 'MOVE_SCRIPT': {
-      const idx = state.scripts.findIndex((s) => s.id === action.id);
-      const target = idx + action.dir;
-      if (idx < 0 || target < 0 || target >= state.scripts.length) {
+      const mine = state.scripts.filter((s) => s.profileId === state.activeProfileId);
+      const local = mine.findIndex((s) => s.id === action.id);
+      const next = local + action.dir;
+      if (local < 0 || next < 0 || next >= mine.length) {
         return state;
       }
-      const scripts = [...state.scripts];
-      const [moved] = scripts.splice(idx, 1);
-      scripts.splice(target, 0, moved);
+      const reordered = [...mine];
+      const [moved] = reordered.splice(local, 1);
+      reordered.splice(next, 0, moved);
+      let i = 0;
+      const scripts = state.scripts.map((s) =>
+        s.profileId === state.activeProfileId ? reordered[i++] : s,
+      );
       return { ...state, scripts };
     }
     case 'ADD_EXTENSION':
-      return { ...state, extensions: [...state.extensions, action.extension] };
+      return {
+        ...state,
+        extensions: [
+          ...state.extensions,
+          { ...action.extension, profileId: action.extension.profileId || state.activeProfileId },
+        ],
+      };
     case 'UPDATE_EXTENSION':
       return {
         ...state,
@@ -362,12 +459,11 @@ function reducer(state: AppState, action: Action): AppState {
     case 'DEL_EXTENSION':
       return { ...state, extensions: state.extensions.filter((e) => e.id !== action.id) };
     case 'ADD_HISTORY': {
-      const item = action.item;
-      const filtered = state.history.filter(
-        (h) => h.url !== item.url || item.at - h.at > 60_000,
-      );
-      const history = [item, ...filtered].slice(0, 500);
-      return { ...state, history };
+      const item = { ...action.item, profileId: action.item.profileId || state.activeProfileId };
+      const mine = state.history.filter((h) => h.profileId === item.profileId);
+      const others = state.history.filter((h) => h.profileId !== item.profileId);
+      const filtered = mine.filter((h) => h.url !== item.url || item.at - h.at > 60_000);
+      return { ...state, history: [item, ...filtered].slice(0, 500).concat(others) };
     }
     case 'DEL_HISTORY':
       return {
@@ -375,9 +471,18 @@ function reducer(state: AppState, action: Action): AppState {
         history: state.history.filter((h) => h.url !== action.url || h.at !== action.at),
       };
     case 'CLEAR_HISTORY':
-      return { ...state, history: [] };
+      return {
+        ...state,
+        history: state.history.filter((h) => h.profileId !== state.activeProfileId),
+      };
     case 'ADD_BOOKMARK':
-      return { ...state, bookmarks: [action.bookmark, ...state.bookmarks] };
+      return {
+        ...state,
+        bookmarks: [
+          { ...action.bookmark, profileId: action.bookmark.profileId || state.activeProfileId },
+          ...state.bookmarks,
+        ],
+      };
     case 'DEL_BOOKMARK':
       return { ...state, bookmarks: state.bookmarks.filter((b) => b.id !== action.id) };
     case 'SET_SETTINGS':
@@ -387,27 +492,123 @@ function reducer(state: AppState, action: Action): AppState {
       if (!q) {
         return state;
       }
-      const recentSearches = [q, ...state.settings.recentSearches.filter((x) => x !== q)].slice(0, 10);
-      return { ...state, settings: { ...state.settings, recentSearches } };
+      const prev = state.recentByProfile[state.activeProfileId] ?? [];
+      const recent = [q, ...prev.filter((x) => x !== q)].slice(0, 10);
+      return {
+        ...state,
+        recentByProfile: { ...state.recentByProfile, [state.activeProfileId]: recent },
+      };
     }
     case 'SET_SITE_CONFIG': {
-      const current = state.siteConfigs[action.host] ?? { host: action.host };
-      const merged: SiteConfig = { ...current, ...action.patch, host: action.host };
-      const siteConfigs = { ...state.siteConfigs, [action.host]: merged };
+      const key = siteKey(state.activeProfileId, action.host);
+      const current = state.siteConfigs[key] ?? { host: action.host, profileId: state.activeProfileId };
+      const merged: SiteConfig = {
+        ...current,
+        ...action.patch,
+        host: action.host,
+        profileId: state.activeProfileId,
+      };
+      const siteConfigs = { ...state.siteConfigs, [key]: merged };
       if (
         merged.javascriptEnabled === undefined &&
         merged.adblockEnabled === undefined &&
         !merged.userAgent &&
-        !merged.customCss
+        !merged.customCss &&
+        merged.httpsUpgrades === undefined
       ) {
-        delete siteConfigs[action.host];
+        delete siteConfigs[key];
       }
       return { ...state, siteConfigs };
     }
     case 'DEL_SITE_CONFIG': {
       const siteConfigs = { ...state.siteConfigs };
+      delete siteConfigs[siteKey(state.activeProfileId, action.host)];
       delete siteConfigs[action.host];
       return { ...state, siteConfigs };
+    }
+    case 'ADD_PROFILE': {
+      if (state.profiles.some((p) => p.id === action.id)) {
+        return state;
+      }
+      return {
+        ...state,
+        profiles: [
+          ...state.profiles,
+          { id: action.id, name: action.name.trim() || 'Profil', color: action.color, createdAt: Date.now() },
+        ],
+        workspaces: [...state.workspaces, ...workspacesForProfile(action.id)],
+        recentByProfile: { ...state.recentByProfile, [action.id]: [] },
+      };
+    }
+    case 'UPDATE_PROFILE':
+      return {
+        ...state,
+        profiles: state.profiles.map((p) => (p.id === action.id ? { ...p, ...action.patch, id: p.id } : p)),
+      };
+    case 'DELETE_PROFILE': {
+      if (state.profiles.length <= 1 || !state.profiles.some((p) => p.id === action.id)) {
+        return state;
+      }
+      const profiles = state.profiles.filter((p) => p.id !== action.id);
+      const nextId = state.activeProfileId === action.id ? profiles[0].id : state.activeProfileId;
+      const nextTabs = state.tabs.filter((t) => t.profileId === nextId);
+      const nextWs = state.workspaces.find((w) => w.profileId === nextId);
+      const focus = state.profileFocus[nextId];
+      const activeTab =
+        nextTabs.find((t) => t.id === focus?.tabId) ?? nextTabs[0] ?? null;
+      const recentByProfile = { ...state.recentByProfile };
+      delete recentByProfile[action.id];
+      const profileFocus = { ...state.profileFocus };
+      delete profileFocus[action.id];
+      return {
+        ...state,
+        profiles,
+        activeProfileId: nextId,
+        activeTabId: activeTab ? activeTab.id : null,
+        activeWorkspaceId: activeTab?.workspaceId ?? nextWs?.id ?? focus?.workspaceId ?? state.activeWorkspaceId,
+        profileFocus,
+        recentByProfile,
+        tabs: state.tabs.filter((t) => t.profileId !== action.id),
+        workspaces: state.workspaces.filter((w) => w.profileId !== action.id),
+        tabGroups: state.tabGroups.filter((g) => g.profileId !== action.id),
+        scripts: state.scripts.filter((s) => s.profileId !== action.id),
+        extensions: state.extensions.filter((e) => e.profileId !== action.id),
+        history: state.history.filter((h) => h.profileId !== action.id),
+        bookmarks: state.bookmarks.filter((b) => b.profileId !== action.id),
+        siteConfigs: Object.fromEntries(
+          Object.entries(state.siteConfigs).filter(([, cfg]) => cfg.profileId !== action.id),
+        ),
+      };
+    }
+    case 'SWITCH_PROFILE': {
+      if (!state.profiles.some((p) => p.id === action.id) || action.id === state.activeProfileId) {
+        return state;
+      }
+      const profileFocus = {
+        ...state.profileFocus,
+        [state.activeProfileId]: {
+          tabId: state.activeTabId,
+          workspaceId: state.activeWorkspaceId,
+        },
+      };
+      const focus = profileFocus[action.id];
+      const tabs = state.tabs.filter((t) => t.profileId === action.id);
+      const workspaces = state.workspaces.filter((w) => w.profileId === action.id);
+      const activeTab =
+        tabs.find((t) => t.id === focus?.tabId) ?? tabs[0] ?? null;
+      const workspaceId =
+        activeTab?.workspaceId ??
+        (workspaces.some((w) => w.id === focus?.workspaceId) ? focus?.workspaceId : workspaces[0]?.id) ??
+        state.activeWorkspaceId;
+      return {
+        ...state,
+        activeProfileId: action.id,
+        profileFocus,
+        activeTabId: activeTab ? activeTab.id : null,
+        activeWorkspaceId: workspaceId,
+        splitTabIds: [],
+        ui: { ...state.ui, screen: 'browser', tabSwitcher: false, omnibox: { ...state.ui.omnibox, open: false } },
+      };
     }
     case 'SET_USER_BLOCKLIST':
       return { ...state, userBlocklist: action.text };
@@ -420,7 +621,9 @@ function reducer(state: AppState, action: Action): AppState {
 
 interface StoreApi {
   state: AppState;
+  fullState: AppState;
   dispatch: React.Dispatch<Action>;
+  switchProfile: (id: string) => Promise<void>;
   activeTab: Tab | null;
   activeEngine: Settings['engines'][number];
   tabsInWorkspace: (workspaceId: string) => Tab[];
@@ -451,7 +654,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         persisted = null;
       }
       if (alive) {
-        dispatch({ type: 'HYDRATE', state: persisted });
+        const id =
+          persisted?.activeProfileId && persisted.profiles?.some((p) => p.id === persisted.activeProfileId)
+            ? persisted.activeProfileId
+            : DEFAULT_PROFILE_ID;
+        await setActiveBrowserProfile(id);
+        if (alive) {
+          dispatch({ type: 'HYDRATE', state: persisted });
+        }
       }
     })();
     return () => {
@@ -492,17 +702,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      for (const [host, cfg] of Object.entries(state.siteConfigs)) {
+      const hosts = new Set<string>();
+      for (const cfg of Object.values(state.siteConfigs)) {
+        if (cfg.host) {
+          hosts.add(cfg.host);
+        }
+      }
+      for (const host of hosts) {
         if (cancelled) {
           return;
         }
-        await adblockAllowHost(host, cfg.adblockEnabled !== false);
+        const mine = Object.values(state.siteConfigs).find(
+          (cfg) => cfg.host === host && (cfg.profileId || DEFAULT_PROFILE_ID) === state.activeProfileId,
+        );
+        await adblockAllowHost(host, mine ? mine.adblockEnabled !== false : true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [state.siteConfigs]);
+  }, [state.siteConfigs, state.activeProfileId]);
 
   useEffect(() => {
     if (state.hydrated && state.userBlocklist) {
@@ -510,9 +729,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.hydrated]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const view = useMemo(() => projectState(state), [state]);
+
   const activeTab = useMemo(
-    () => state.tabs.find((t) => t.id === state.activeTabId) ?? null,
-    [state.tabs, state.activeTabId],
+    () => view.tabs.find((t) => t.id === view.activeTabId) ?? null,
+    [view.tabs, view.activeTabId],
   );
 
   const activeEngine = useMemo(
@@ -524,21 +745,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const tabsInWorkspace = useCallback(
-    (workspaceId: string) => state.tabs.filter((t) => t.workspaceId === workspaceId),
-    [state.tabs],
+    (workspaceId: string) => view.tabs.filter((t) => t.workspaceId === workspaceId),
+    [view.tabs],
   );
 
   const siteConfigFor = useCallback(
     (url: string) => {
       try {
         const host = new URL(url).hostname.toLowerCase();
-        return state.siteConfigs[host];
+        return view.siteConfigs[host];
       } catch {
         return undefined;
       }
     },
-    [state.siteConfigs],
+    [view.siteConfigs],
   );
+
+  const switchProfile = useCallback(async (id: string) => {
+    await setActiveBrowserProfile(id);
+    dispatch({ type: 'SWITCH_PROFILE', id });
+  }, []);
 
   const resolveInput = useCallback(
     async (text: string) => {
@@ -567,8 +793,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<StoreApi>(
     () => ({
-      state,
+      state: view,
+      fullState: state,
       dispatch,
+      switchProfile,
       activeTab,
       activeEngine,
       tabsInWorkspace,
@@ -576,7 +804,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       resolveInput,
       openNewTab,
     }),
-    [state, activeTab, activeEngine, tabsInWorkspace, siteConfigFor, resolveInput, openNewTab],
+    [view, state, switchProfile, activeTab, activeEngine, tabsInWorkspace, siteConfigFor, resolveInput, openNewTab],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

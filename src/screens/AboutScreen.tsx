@@ -41,10 +41,10 @@ export function AboutScreen() {
         </View>
         <Text style={{ color: theme.text, fontSize: 20, fontWeight: '800' }}>Zenith Browser</Text>
         <Text style={{ color: theme.subtext, fontSize: 13 }}>
-          v0.4.3 • Rust + React Native • Android 7.0+
+          v0.4.4 • Browser shell · mesin Chromium WebView
         </Text>
-        <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 4, textAlign: 'center', lineHeight: 18 }}>
-          Zenith — cepat, ringan, privat. Tanpa telemetri.
+        <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 4, textAlign: 'center', lineHeight: 18, paddingHorizontal: 28 }}>
+          Zenith adalah browser: profil, tab, perisai, dan unduhan. Mesinnya Chromium WebView — keluarga yang sama dengan Chrome — supaya tetap secepat WebView, tanpa membawa salinan Chromium 100 MB.
         </Text>
         <Text style={{ color: theme.accent, fontSize: 12.5, marginTop: 8, fontWeight: '700' }}>
           Built with 🩷 Pistis Litae

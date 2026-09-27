@@ -11,10 +11,23 @@ export type Screen =
   | 'passwords'
   | 'account';
 
+export interface BrowserProfile {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: number;
+}
+
+export interface ProfileFocus {
+  tabId: string | null;
+  workspaceId: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
   icon: string; // emoji
+  profileId?: string;
 }
 
 export interface TabGroup {
@@ -22,6 +35,7 @@ export interface TabGroup {
   name: string;
   color: string;
   createdAt: number;
+  profileId?: string;
 }
 
 export interface Tab {
@@ -29,6 +43,7 @@ export interface Tab {
   url: string;
   title: string;
   workspaceId: string;
+  profileId?: string;
   groupId?: string | null;
   incognito: boolean;
   canGoBack: boolean;
@@ -68,6 +83,7 @@ export interface UserScript {
   enabled: boolean;
   matchAll: boolean; // jalankan di semua http(s) bila tanpa pola
   updatedAt: number;
+  profileId?: string;
 }
 
 export interface NormalizedContentScript {
@@ -93,6 +109,7 @@ export interface Extension {
   iconLetter: string;
   files: Record<string, string>; // path -> isi js/css
   importedAt: number;
+  profileId?: string;
 }
 
 export interface SearchEngine {
@@ -110,6 +127,7 @@ export interface SiteConfig {
   userAgent?: string; // '' = bawaan
   customCss?: string;
   httpsUpgrades?: boolean; // false = jangan paksa https utk situs ini
+  profileId?: string;
 }
 
 export interface Settings {
@@ -132,12 +150,14 @@ export interface HistoryItem {
   url: string;
   title: string;
   at: number;
+  profileId?: string;
 }
 
 export interface Bookmark {
   id: string;
   url: string;
   title: string;
+  profileId?: string;
 }
 
 export interface OmniboxState {

@@ -41,6 +41,7 @@ interface ZenithCoreNative {
   openPrivateDnsSettings(): Promise<boolean>;
   privateProfileSupported(): Promise<boolean>;
   clearPrivateSession(): Promise<boolean>;
+  setActiveBrowserProfile(profileId: string): Promise<boolean>;
 }
 
 const ZC = NativeModules.ZenithCore as ZenithCoreNative | undefined;
@@ -345,6 +346,14 @@ export async function clearPrivateSession(): Promise<void> {
     await ZC?.clearPrivateSession();
   } catch {
     // profil privat mungkin tidak ada
+  }
+}
+
+export async function setActiveBrowserProfile(profileId: string): Promise<void> {
+  try {
+    await ZC?.setActiveBrowserProfile(profileId);
+  } catch {
+    // perangkat tanpa modul native tetap memisahkan data aplikasi
   }
 }
 

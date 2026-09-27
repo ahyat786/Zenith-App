@@ -46,7 +46,7 @@ import { subscribeDownloads, type DownloadJob } from '../core/downloads';
 import type { Tab } from '../types';
 
 export function BrowserScreen() {
-  const { state, dispatch, activeTab, tabsInWorkspace, openNewTab, siteConfigFor } = useStore();
+  const { state, fullState, dispatch, switchProfile, activeTab, tabsInWorkspace, openNewTab, siteConfigFor } = useStore();
   const theme = useTheme(state.settings.theme);
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -54,6 +54,15 @@ export function BrowserScreen() {
   const [stats, setStats] = useState<AdblockStats | null>(null);
   const [download, setDownload] = useState<DownloadJob | null>(null);
   const [connLog, setConnLog] = useState<ConnLogEntry[]>([]);
+  const [profilesOpen, setProfilesOpen] = useState(false);
+  const [profilePair, setProfilePair] = useState<{ current: string; warm: string | null }>({
+    current: state.activeProfileId,
+    warm: null,
+  });
+  if (profilePair.current !== state.activeProfileId) {
+    setProfilePair({ current: state.activeProfileId, warm: profilePair.current });
+  }
+  const warmProfileId = profilePair.warm;
 
   const wsTabs = tabsInWorkspace(state.activeWorkspaceId);
   const splitIds = state.splitTabIds;
@@ -142,7 +151,7 @@ export function BrowserScreen() {
     downloadRef.current = download;
   }, [download]);
 
-  const privateCount = state.tabs.filter((t) => t.incognito).length;
+  const privateCount = fullState.tabs.filter((t) => t.incognito).length;
   useEffect(() => {
     if (!state.hydrated || privateCount > 0) {
       return;
@@ -338,8 +347,25 @@ export function BrowserScreen() {
     </ScrollView>
   ) : null;
 
+  const activeProfile = state.profiles.find((p) => p.id === state.activeProfileId) ?? state.profiles[0];
   const addressRow = (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingTop: 2 }}>
+      <Pressable
+        onPress={() => setProfilesOpen(true)}
+        hitSlop={6}
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          marginRight: 6,
+          backgroundColor: activeProfile?.color ?? theme.accent,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>
+          {(activeProfile?.name || 'U').slice(0, 1).toUpperCase()}
+        </Text>
+      </Pressable>
       {/* SHIELDS */}
       <Pressable
         onPress={() => setShieldsOpen(true)}
@@ -552,6 +578,19 @@ export function BrowserScreen() {
 
   const empty = state.tabs.length === 0;
   const wsEmptyButTabsExist = !empty && wsTabs.length === 0;
+  const mountTabs = useMemo(() => {
+    const must = fullState.tabs.filter(
+      (t) =>
+        t.profileId === state.activeProfileId &&
+        (t.workspaceId === state.activeWorkspaceId || t.id === state.activeTabId),
+    );
+    const rest = fullState.tabs.filter(
+      (t) =>
+        (t.profileId === state.activeProfileId || t.profileId === warmProfileId) &&
+        !must.some((m) => m.id === t.id),
+    );
+    return [...must, ...rest.slice(0, Math.max(0, 12 - must.length))];
+  }, [fullState.tabs, state.activeProfileId, state.activeWorkspaceId, state.activeTabId, warmProfileId]);
 
   // ---------- panel SHIELD GUARD (Brave + log koneksi) ----------
   const shieldsSheet = (
@@ -724,35 +763,36 @@ export function BrowserScreen() {
 
       {/* ---------- konten ---------- */}
       <View style={{ flex: 1 }}>
+        {mountTabs
+          .filter((t) => !(splitActive && splitIds.includes(t.id)))
+          .map((t) => renderTab(t))}
         {empty ? (
-          <NewTabPage theme={theme} />
-        ) : wsEmptyButTabsExist ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <View style={StyleSheet.absoluteFill}>
+            <NewTabPage theme={theme} />
+          </View>
+        ) : wsEmptyButTabsExist && !splitActive ? (
+          <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: theme.bg }]}>
             <Icon name="folder" size={40} color={theme.subtext} />
             <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700', marginTop: 12, textAlign: 'center' }}>
               Tidak ada tab di workspace ini
             </Text>
             <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
-              Tab Anda ada di workspace lain — buka daftar tab untuk berpindah, atau tekan ＋ untuk tab baru.
+              Tab di workspace lain tetap terbuka di memori. Pindah workspace untuk kembali tanpa memuat ulang.
             </Text>
           </View>
-        ) : (
-          <>
-            {wsTabs.filter((t) => !splitIds.includes(t.id)).map((t) => renderTab(t))}
-            {splitActive ? (
-              <View style={StyleSheet.absoluteFill}>
-                <View style={{ flex: 1, flexDirection: 'row' }}>
-                  <View style={{ flex: 1 }}>{renderTab(splitA!, true)}</View>
-                  <Pressable
-                    style={{ width: 6, backgroundColor: theme.border }}
-                    onPress={() => dispatch({ type: 'SET_SPLIT', ids: [splitIds[1], splitIds[0]] })}
-                  />
-                  <View style={{ flex: 1 }}>{renderTab(splitB!, true)}</View>
-                </View>
-              </View>
-            ) : null}
-          </>
-        )}
+        ) : null}
+        {splitActive ? (
+          <View style={StyleSheet.absoluteFill}>
+            <View style={{ flex: 1, flexDirection: 'row' }}>
+              <View style={{ flex: 1 }}>{renderTab(splitA!, true)}</View>
+              <Pressable
+                style={{ width: 6, backgroundColor: theme.border }}
+                onPress={() => dispatch({ type: 'SET_SPLIT', ids: [splitIds[1], splitIds[0]] })}
+              />
+              <View style={{ flex: 1 }}>{renderTab(splitB!, true)}</View>
+            </View>
+          </View>
+        ) : null}
 
         {/* banner unduhan — bawah, bisa ditutup, tidak menempel saat gagal */}
         {download && (download.status === 'downloading' || download.status === 'connecting') ? (
@@ -885,6 +925,60 @@ export function BrowserScreen() {
         actions={linkActions}
         theme={theme}
       />
+      <Sheet visible={profilesOpen} onClose={() => setProfilesOpen(false)} title="Profil" theme={theme}>
+        <View style={{ padding: spacing.lg, gap: 8 }}>
+          <Text style={{ color: theme.subtext, fontSize: 13, lineHeight: 19, marginBottom: 4 }}>
+            Pindah profil tidak menutup tab. Setiap profil menyimpan sesinya sendiri.
+          </Text>
+          {state.profiles.map((p) => {
+            const n = fullState.tabs.filter((t) => t.profileId === p.id).length;
+            const on = p.id === state.activeProfileId;
+            return (
+              <Pressable
+                key={p.id}
+                onPress={() => {
+                  setProfilesOpen(false);
+                  if (!on) {
+                    switchProfile(p.id);
+                    ToastAndroid.show(`${p.name} — tab lain tetap tersimpan`, ToastAndroid.SHORT);
+                  }
+                }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  padding: 12,
+                  borderRadius: 14,
+                  backgroundColor: on ? theme.accentSoft : theme.surface2,
+                }}>
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: p.color,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>{p.name.slice(0, 1).toUpperCase()}</Text>
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15 }}>{p.name}</Text>
+                  <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 2 }}>{n} tab tersimpan</Text>
+                </View>
+                {on ? <Text style={{ color: p.color, fontWeight: '800', fontSize: 12 }}>AKTIF</Text> : null}
+              </Pressable>
+            );
+          })}
+          <Pressable
+            onPress={() => {
+              setProfilesOpen(false);
+              dispatch({ type: 'SET_SCREEN', screen: 'account' });
+            }}
+            style={{ paddingVertical: 12, alignItems: 'center' }}>
+            <Text style={{ color: theme.accent, fontWeight: '700' }}>Kelola profil</Text>
+          </Pressable>
+        </View>
+      </Sheet>
       {state.ui.omnibox.open ? <Omnibox theme={theme} /> : null}
     </View>
   );

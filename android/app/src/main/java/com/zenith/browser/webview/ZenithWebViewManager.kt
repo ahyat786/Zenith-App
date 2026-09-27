@@ -20,12 +20,14 @@ class ZenithWebViewManager : RNCWebViewManager() {
      * menjalankan CookieManager.removeAllCookies() pada toples global,
      * lalu tab privat tetap berbagi kuki dengan tab biasa.
      */
+    override fun createViewInstance(reactContext: ThemedReactContext): RNCWebViewWrapper {
+        val view = super.createViewInstance(reactContext)
+        ZenithPrivate.bind(view.webView, false)
+        return view
+    }
+
     override fun setIncognito(view: RNCWebViewWrapper, value: Boolean) {
-        if (value) {
-            ZenithPrivate.apply(view.webView)
-        } else {
-            ZenithPrivate.unmark(view.webView)
-        }
+        ZenithPrivate.bind(view.webView, value)
     }
 
     /**
@@ -35,7 +37,7 @@ class ZenithWebViewManager : RNCWebViewManager() {
     override fun setNewSource(view: RNCWebViewWrapper, source: ReadableMap?) {
         view.webView.post {
             if (ZenithPrivate.isPrivate(view.webView)) {
-                ZenithPrivate.apply(view.webView)
+                ZenithPrivate.bind(view.webView, true)
             }
             loadSource(view, source)
         }

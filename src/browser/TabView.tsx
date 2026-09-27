@@ -264,6 +264,10 @@ export function TabView({ tab, active, theme }: Props) {
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onNavigationStateChange={onNavigationStateChange}
         onLoadingProgress={onProgress}
+        onLoadEnd={() => {
+          dispatch({ type: 'UPDATE_TAB', id: tab.id, patch: { loading: false, progress: 1 } });
+        }}
+        cacheEnabled
         onOpenWindow={(e: any) => {
           const target = e?.nativeEvent?.targetUrl;
           if (typeof target === 'string' && target) {
@@ -305,7 +309,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent="Zenith/0.4.3"
+        applicationNameForUserAgent="Zenith/0.4.4"
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

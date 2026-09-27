@@ -146,4 +146,11 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
         com.zenith.browser.webview.ZenithPrivate.clear()
         promise.resolve(true)
     }
+
+    /** Profil browser yang dipakai WebView baru. Tab lama tetap di profilnya. */
+    @ReactMethod
+    fun setActiveBrowserProfile(profileId: String, promise: Promise) {
+        com.zenith.browser.webview.ZenithPrivate.setActive(profileId)
+        promise.resolve(true)
+    }
 }

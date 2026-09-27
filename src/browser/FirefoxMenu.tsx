@@ -14,12 +14,14 @@ import {
   Switch,
   Text,
   TextInput,
+  ToastAndroid,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Theme } from '../theme';
 import type { Extension } from '../types';
 import { Icon, type IconName } from '../ui/Icon';
+import { useStore } from '../state/store';
 
 interface Props {
   visible: boolean;
@@ -58,6 +60,8 @@ interface Props {
 
 export function FirefoxMenu(props: Props) {
   const { theme, visible, onClose } = props;
+  const { state, switchProfile } = useStore();
+  const activeProfile = state.profiles.find((p) => p.id === state.activeProfileId) ?? state.profiles[0];
   const insets = useSafeAreaInsets();
   const [extOpen, setExtOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -238,17 +242,57 @@ export function FirefoxMenu(props: Props) {
               <GridBtn theme={theme} card={card} icon="key" label="Kata sandi" onPress={() => go(props.onPasswords)} />
             </View>
 
-            <Pressable
-              onPress={() => go(props.onAccount)}
-              style={{ backgroundColor: card, borderRadius: 14, marginTop: 10, flexDirection: 'row', alignItems: 'center', padding: 14 }}>
-              <Icon name="user" size={22} color={ink} />
-              <View style={{ marginLeft: 14, flex: 1 }}>
-                <Text style={{ color: ink, fontSize: 16, fontWeight: '600' }}>Masuk</Text>
-                <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 2 }}>
-                  Data tetap di perangkat — Zenith tidak memakai akun
-                </Text>
-              </View>
-            </Pressable>
+            <View style={{ backgroundColor: card, borderRadius: 14, marginTop: 10, padding: 14 }}>
+              <Pressable onPress={() => go(props.onAccount)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: activeProfile?.color ?? theme.accent,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>
+                    {(activeProfile?.name || 'U').slice(0, 1).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: ink, fontSize: 16, fontWeight: '700' }}>{activeProfile?.name ?? 'Profil'}</Text>
+                  <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 2 }}>
+                    Profil terpisah · tab tetap tersimpan
+                  </Text>
+                </View>
+                <Icon name="chevronRight" size={18} color={theme.subtext} />
+              </Pressable>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+                {state.profiles.map((p) => {
+                  const on = p.id === state.activeProfileId;
+                  return (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => {
+                        if (!on) {
+                        switchProfile(p.id);
+                        ToastAndroid.show(`${p.name} — tab lain tetap tersimpan`, ToastAndroid.SHORT);
+                      }
+                      onClose();
+                      }}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        marginRight: 8,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 999,
+                        backgroundColor: on ? p.color : theme.surface2,
+                      }}>
+                      <Text style={{ color: on ? '#fff' : ink, fontWeight: '700', fontSize: 12.5 }}>{p.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
             <Pressable
               onPress={() => go(props.onSettings)}

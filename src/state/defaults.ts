@@ -55,10 +55,28 @@ export const DEFAULT_SETTINGS: Settings = {
   dns: DEFAULT_DNS_SETTINGS,
 };
 
+export const DEFAULT_PROFILE_ID = 'profile-utama';
+
+export const PROFILE_COLORS = ['#8b7cf6', '#3d8bfd', '#2f9e6b', '#e0a100', '#e35d6a', '#d4760a'];
+
+export const DEFAULT_PROFILE = {
+  id: DEFAULT_PROFILE_ID,
+  name: 'Utama',
+  color: PROFILE_COLORS[0],
+  createdAt: 0,
+};
+
 export const DEFAULT_WORKSPACES = [
-  { id: 'ws-personal', name: 'Pribadi', icon: '🏠' },
-  { id: 'ws-work', name: 'Kerja', icon: '💼' },
+  { id: 'ws-personal', name: 'Pribadi', icon: '🏠', profileId: DEFAULT_PROFILE_ID },
+  { id: 'ws-work', name: 'Kerja', icon: '💼', profileId: DEFAULT_PROFILE_ID },
 ];
+
+export function workspacesForProfile(profileId: string) {
+  return [
+    { id: `ws-${profileId}-home`, name: 'Pribadi', icon: '🏠', profileId },
+    { id: `ws-${profileId}-work`, name: 'Kerja', icon: '💼', profileId },
+  ];
+}
 
 export const WORKSPACE_ICONS = [
   '🏠', '💼', '📚', '🎮', '🛒', '🎬', '🎵', '🌐', '🔬', '💬', '✈️', '💡',
