@@ -5,7 +5,11 @@ export type Screen =
   | 'extensions'
   | 'siteSettings'
   | 'downloads'
-  | 'about';
+  | 'about'
+  | 'history'
+  | 'bookmarks'
+  | 'passwords'
+  | 'account';
 
 export interface Workspace {
   id: string;

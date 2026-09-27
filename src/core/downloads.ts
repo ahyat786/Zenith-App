@@ -1,7 +1,6 @@
 /**
  * Unduhan cepat — jembatan ke ZenithDownloads (Kotlin).
- * Multi-thread (4 koneksi paralel + Range requests) untuk unduhan
- * secepat mungkin; jatuh mulus bila modul native tidak tersedia.
+ * Kecepatan penuh; koneksi paralel hanya bila server mendukung Range, paling banyak 4.
  */
 
 import { NativeEventEmitter, NativeModules } from 'react-native';
@@ -12,7 +11,7 @@ interface ZenithDownloadsNative {
   list(): Promise<DownloadJob[]>;
   open(id: string): Promise<boolean>;
   share(id: string): Promise<boolean>;
-  remove(id: string): Promise<boolean>;
+  remove(id: string, deleteFile: boolean): Promise<boolean>;
   setEnabled(enabled: boolean): Promise<void>;
   addListener(event: string): void;
   removeListeners(count: number): void;
@@ -28,11 +27,47 @@ export interface DownloadJob {
   url: string;
   filename: string;
   path: string;
+  mime?: string;
   total: number; // -1 bila tidak diketahui
   done: number;
   speed: number; // byte/detik
+  finishedAt?: number;
+  fileExists?: boolean;
   status: DownloadStatus;
   error?: string;
+}
+
+export type DownloadCategory = 'APK' | 'Gambar' | 'Video' | 'Audio' | 'Dokumen' | 'Arsip' | 'Lainnya';
+
+export function downloadCategory(job: DownloadJob): DownloadCategory {
+  const name = (job.filename || '').toLowerCase();
+  const mime = (job.mime || '').toLowerCase();
+  if (name.endsWith('.apk') || mime.includes('package-archive')) {
+    return 'APK';
+  }
+  if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|heic|svg)$/.test(name)) {
+    return 'Gambar';
+  }
+  if (mime.startsWith('video/') || /\.(mp4|mkv|webm|mov|avi|m4v)$/.test(name)) {
+    return 'Video';
+  }
+  if (mime.startsWith('audio/') || /\.(mp3|m4a|aac|ogg|flac|wav|opus)$/.test(name)) {
+    return 'Audio';
+  }
+  if (
+    mime.includes('pdf') ||
+    mime.includes('document') ||
+    mime.includes('text/') ||
+    mime.includes('spreadsheet') ||
+    mime.includes('presentation') ||
+    /\.(pdf|docx?|xlsx?|pptx?|txt|epub|csv|rtf)$/.test(name)
+  ) {
+    return 'Dokumen';
+  }
+  if (mime.includes('zip') || mime.includes('compressed') || mime.includes('archive') || /\.(zip|rar|7z|tar|gz|bz2)$/.test(name)) {
+    return 'Arsip';
+  }
+  return 'Lainnya';
 }
 
 export async function startDownload(
@@ -71,24 +106,22 @@ export async function listDownloads(): Promise<DownloadJob[]> {
 }
 
 export async function openDownload(id: string): Promise<void> {
-  try {
-    await D?.open(id);
-  } catch {
-    // diabaikan
+  if (!D) {
+    throw new Error('Modul unduhan tidak aktif.');
   }
+  await D.open(id);
 }
 
 export async function shareDownload(id: string): Promise<void> {
-  try {
-    await D?.share(id);
-  } catch {
-    // diabaikan
+  if (!D) {
+    throw new Error('Modul unduhan tidak aktif.');
   }
+  await D.share(id);
 }
 
-export async function removeDownload(id: string): Promise<void> {
+export async function removeDownload(id: string, deleteFile = false): Promise<void> {
   try {
-    await D?.remove(id);
+    await D?.remove(id, deleteFile);
   } catch {
     // diabaikan
   }

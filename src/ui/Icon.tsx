@@ -7,7 +7,8 @@ export type IconName =
   | 'puzzle' | 'search' | 'star' | 'starFilled' | 'more' | 'chevronRight'
   | 'chevronDown' | 'trash' | 'pencil' | 'refresh' | 'globe' | 'zap'
   | 'share' | 'check' | 'expand' | 'clock' | 'info' | 'download' | 'folder'
-  | 'bookmark' | 'arrowUp' | 'arrowDown' | 'warning' | 'monitor' | 'phone';
+  | 'bookmark' | 'arrowUp' | 'arrowDown' | 'warning' | 'monitor' | 'phone'
+  | 'key' | 'user';
 
 interface Props {
   name: IconName;
@@ -71,6 +72,8 @@ export function Icon({ name, size = 22, color = '#fff', strokeWidth = 2 }: Props
       case 'warning': return <G>{P('M12 3.5L22 20H2L12 3.5z')}{P('M12 9.5v4.5M12 17.2h.01')}</G>;
       case 'monitor': return <G>{P('M3 5h18v11H3z')}{P('M9 20h6M12 16v4')}</G>;
       case 'phone': return <G>{P('M7.5 3.5h9v17h-9z')}{P('M10.5 18.5h3')}</G>;
+      case 'key': return <G>{P('M14.5 8.5a3.5 3.5 0 11-1.1 6.8L8 20.5H5.2V18l5.4-5.2A3.5 3.5 0 0114.5 8.5z')}{P('M15.2 7.2l1.6-1.6')}</G>;
+      case 'user': return <G><Circle cx={12} cy={8} r={3.2} />{P('M5 19.5c1.2-3 3.6-4.5 7-4.5s5.8 1.5 7 4.5')}</G>;
       default: return null;
     }
   })();

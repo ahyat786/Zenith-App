@@ -12,6 +12,7 @@ export function ScreenShell({
   theme,
   children,
   scroll = true,
+  right,
 }: {
   title: string;
   subtitle?: string;
@@ -19,6 +20,7 @@ export function ScreenShell({
   theme: Theme;
   children: React.ReactNode;
   scroll?: boolean;
+  right?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   return (
@@ -54,6 +56,7 @@ export function ScreenShell({
             </Text>
           ) : null}
         </View>
+        {right ? <View style={{ marginLeft: 8 }}>{right}</View> : null}
       </View>
       {scroll ? (
         <ScrollView

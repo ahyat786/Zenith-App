@@ -7,12 +7,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import { Icon } from '../ui/Icon';
+import { SettingsHome, type SettingsPanel, type SettingsRow } from './SettingsHome';
 
 import { useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import {
   Button,
+  IconButton,
   ListSection,
   Row,
   SegmentedControl,
@@ -42,6 +44,9 @@ export function SettingsScreen() {
   const [listUrl, setListUrl] = useState('');
   const [listMode, setListMode] = useState<'replace' | 'merge'>('replace');
   const [importing, setImporting] = useState(false);
+  const [panel, setPanel] = useState<SettingsPanel>('home');
+  const [filtering, setFiltering] = useState(false);
+  const [settingsQuery, setSettingsQuery] = useState('');
 
   // ---------- Jaringan & DNS Aman (Shield Guard) ----------
   const dns = s.dns;
@@ -147,13 +152,67 @@ export function SettingsScreen() {
     }
   };
 
+  const engineName = s.engines.find((e) => e.id === s.defaultEngineId)?.name ?? 'Mesin pencari';
+  const themeLabel = s.theme === 'dark' ? 'Gelap' : s.theme === 'light' ? 'Terang' : 'Mengikuti sistem';
+  const settingsRows: SettingsRow[] = [
+    { id: 'umum', title: 'Umum', subtitle: themeLabel, panel: 'tampilan' },
+    { id: 'cari', title: 'Cari', subtitle: engineName, panel: 'cari' },
+    { id: 'tab', title: 'Tab', subtitle: s.barPosition === 'top' ? 'Bar di atas' : 'Bar di bawah', panel: 'tab' },
+    { id: 'beranda', title: 'Beranda', subtitle: 'Laman tab baru', panel: 'beranda' },
+    { id: 'ubahsuai', title: 'Ubahsuai', subtitle: 'Ekstensi, skrip, situs', panel: 'ubahsuai' },
+    { id: 'privasi', title: 'Privasi dan keamanan', subtitle: s.httpsUpgrades ? 'HTTPS hidup' : 'HTTPS mati', panel: 'privasi' },
+    { id: 'perisai', title: 'Pemblokir iklan', subtitle: s.adblockEnabled ? 'Aktif' : 'Mati', panel: 'perisai' },
+    { id: 'jaringan', title: 'Jaringan & DNS', subtitle: 'Shield Guard', panel: 'jaringan' },
+    { id: 'data', title: 'Data', subtitle: `${state.history.length} riwayat`, panel: 'data' },
+    { id: 'sandi', title: 'Sandi', subtitle: 'Tidak disimpan di Zenith', screen: 'passwords' },
+    { id: 'unduh', title: 'Unduhan', subtitle: 'Riwayat berkas', screen: 'downloads' },
+    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.4.2', screen: 'about' },
+  ];
+  const panelTitle: Record<SettingsPanel, string> = {
+    home: 'Pengaturan',
+    tampilan: 'Umum',
+    tab: 'Tab',
+    cari: 'Cari',
+    perisai: 'Pemblokir iklan',
+    privasi: 'Privasi dan keamanan',
+    jaringan: 'Jaringan & DNS',
+    data: 'Data',
+    beranda: 'Beranda',
+    ubahsuai: 'Ubahsuai',
+  };
+
   return (
     <ScreenShell
-      title="Pengaturan"
-      onBack={() => dispatch({ type: 'SET_SCREEN', screen: 'browser' })}
-      theme={theme}>
-      {/* ---------------- Tampilan ---------------- */}
-      <ListSection title="Tampilan" theme={theme}>
+      title={panelTitle[panel]}
+      onBack={() => (panel === 'home' ? dispatch({ type: 'SET_SCREEN', screen: 'browser' }) : setPanel('home'))}
+      theme={theme}
+      right={
+        panel === 'home' ? (
+          <IconButton name="search" theme={theme} onPress={() => setFiltering((v) => !v)} />
+        ) : undefined
+      }>
+      {panel === 'home' ? (
+        <SettingsHome
+          theme={theme}
+          rows={settingsRows}
+          filtering={filtering}
+          query={settingsQuery}
+          onQuery={setSettingsQuery}
+          onAccount={() => dispatch({ type: 'SET_SCREEN', screen: 'account' })}
+          onRow={(row) => {
+            if (row.screen) {
+              dispatch({ type: 'SET_SCREEN', screen: row.screen });
+              return;
+            }
+            if (row.panel) {
+              setPanel(row.panel);
+            }
+          }}
+        />
+      ) : null}
+      {/* ---------------- Tampilan / Tab ---------------- */}
+      {panel === 'tampilan' || panel === 'tab' ? (
+      <ListSection title={panel === 'tab' ? 'Tab' : 'Tampilan'} theme={theme}>
         <View style={{ paddingHorizontal: spacing.md, paddingTop: 10 }}>
           <Text style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '600', marginBottom: 6 }}>
             Tema
@@ -193,8 +252,10 @@ export function SettingsScreen() {
           last
         />
       </ListSection>
+      ) : null}
 
       {/* ---------------- Pencarian ---------------- */}
+      {panel === 'cari' ? (
       <ListSection title="Pencarian" theme={theme}>
         {s.engines.map((engine, i) => (
           <Row
@@ -253,8 +314,10 @@ export function SettingsScreen() {
           last
         />
       </ListSection>
+      ) : null}
 
       {/* ---------------- Pemblokir iklan ---------------- */}
+      {panel === 'perisai' ? (
       <ListSection title="Pemblokir iklan" theme={theme}>
         <ToggleRow
           theme={theme}
@@ -289,8 +352,10 @@ export function SettingsScreen() {
           last
         />
       </ListSection>
+      ) : null}
 
       {/* ---------------- Privasi & unduhan (Brave + Via) ---------------- */}
+      {panel === 'privasi' ? (
       <ListSection title="Privasi & unduhan" theme={theme}>
         <ToggleRow
           theme={theme}
@@ -303,8 +368,8 @@ export function SettingsScreen() {
         <ToggleRow
           theme={theme}
           icon="download"
-          title="Unduhan cepat multi-thread"
-          subtitle="4 koneksi paralel; matikan untuk pakai unduhan sistem"
+          title="Unduhan cepat"
+          subtitle="Kecepatan penuh. Matikan untuk memakai unduhan sistem"
           value={s.fastDownloads}
           onValueChange={(v) => dispatch({ type: 'SET_SETTINGS', patch: { fastDownloads: v } })}
         />
@@ -317,8 +382,10 @@ export function SettingsScreen() {
           last
         />
       </ListSection>
+      ) : null}
 
       {/* ---------------- Jaringan & DNS Aman (Shield Guard) ---------------- */}
+      {panel === 'jaringan' ? (
       <ListSection title="Jaringan & DNS Aman (Shield Guard)" theme={theme}>
         <View style={{ paddingHorizontal: spacing.md, paddingTop: 10, paddingBottom: 4 }}>
           <Text style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '600', marginBottom: 8 }}>
@@ -509,8 +576,10 @@ export function SettingsScreen() {
           last
         />
       </ListSection>
+      ) : null}
 
       {/* ---------------- Data ---------------- */}
+      {panel === 'data' ? (
       <ListSection title="Data & privasi" theme={theme}>
         <Row
           theme={theme}
@@ -545,18 +614,52 @@ export function SettingsScreen() {
           last
         />
       </ListSection>
+      ) : null}
 
-      {/* ---------------- Tentang ---------------- */}
-      <ListSection title="Tentang" theme={theme}>
-        <Row
-          theme={theme}
-          icon="info"
-          title="Tentang Zenith"
-          subtitle="Versi, kredit, lisensi"
-          onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'about' })}
-          last
-        />
-      </ListSection>
+      {panel === 'beranda' ? (
+        <ListSection title="Laman tab baru" theme={theme}>
+          <View style={{ padding: spacing.md }}>
+            <Text style={{ color: theme.subtext, fontSize: 13.5, lineHeight: 20, marginBottom: 12 }}>
+              Tombol + membuka laman tab baru lengkap — pencarian, pintasan, dan riwayat. Bukan hanya bilah alamat.
+            </Text>
+            <TextField
+              theme={theme}
+              label="Pintasan beranda (opsional)"
+              value={s.homepage}
+              onChangeText={(t) => dispatch({ type: 'SET_SETTINGS', patch: { homepage: t } })}
+              placeholder="https://"
+              keyboardType="url"
+            />
+          </View>
+        </ListSection>
+      ) : null}
+
+      {panel === 'ubahsuai' ? (
+        <ListSection title="Ubahsuai" theme={theme}>
+          <Row
+            theme={theme}
+            icon="puzzle"
+            title="Ekstensi"
+            subtitle={`${state.extensions.length} terpasang`}
+            onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'extensions' })}
+          />
+          <Row
+            theme={theme}
+            icon="code"
+            title="Skrip"
+            subtitle={`${state.scripts.length} skrip`}
+            onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'scripts' })}
+          />
+          <Row
+            theme={theme}
+            icon="globe"
+            title="Pengaturan situs"
+            subtitle="JS, iklan, UA, CSS per situs"
+            onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'siteSettings' })}
+            last
+          />
+        </ListSection>
+      ) : null}
 
       {/* ---------------- lembar: tambah mesin ---------------- */}
       <Sheet visible={addEngine} onClose={() => setAddEngine(false)} title="Mesin pencari baru" theme={theme}>

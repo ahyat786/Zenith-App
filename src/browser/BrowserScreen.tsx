@@ -27,7 +27,10 @@ import { TabView } from './TabView';
 import { Omnibox } from './Omnibox';
 import { TabSwitcher } from './TabSwitcher';
 import { GlanceView } from './GlanceView';
+import { FirefoxMenu } from './FirefoxMenu';
+import { NewTabPage } from './NewTabPage';
 import { getWebView } from './refs';
+import { NEW_TAB_URL, isNewTabUrl } from './newtab';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, IconButton, Row, Sheet, ToggleRow, type SheetAction } from '../ui/kit';
 import {
@@ -172,10 +175,17 @@ export function BrowserScreen() {
   // ---------- aksi ----------
   const openOmniboxNew = (incognito = false) =>
     dispatch({ type: 'SET_OMNIBOX', patch: { open: true, mode: 'new', initial: '', incognito } });
+  const openFreshTab = (incognito = false) => openNewTab(NEW_TAB_URL, { incognito });
+  const onNewTabPage = !activeTab || isNewTabUrl(activeTab.url);
   const openOmniboxEdit = () =>
     dispatch({
       type: 'SET_OMNIBOX',
-      patch: { open: true, mode: 'edit', initial: activeTab?.url ?? '', incognito: false },
+      patch: {
+        open: true,
+        mode: 'edit',
+        initial: activeTab && !isNewTabUrl(activeTab.url) ? activeTab.url : '',
+        incognito: !!activeTab?.incognito,
+      },
     });
 
   const doSplit = () => {
@@ -190,63 +200,38 @@ export function BrowserScreen() {
     dispatch({ type: 'SET_SPLIT', ids: [activeTab.id, other.id] });
   };
 
-  const menuActions: SheetAction[] = useMemo(() => {
-    const actions: SheetAction[] = [
-      { label: 'Tab baru', icon: 'plus', onPress: () => openOmniboxNew() },
-      { label: 'Tab privat', icon: 'eyeOff', onPress: () => openOmniboxNew(true) },
-    ];
-    if (splitActive) {
-      actions.push({ label: 'Keluar dari split', icon: 'close', onPress: () => dispatch({ type: 'SET_SPLIT', ids: [] }) });
-    } else {
-      actions.push({ label: 'Split layar', icon: 'split', onPress: doSplit });
+  const toggleBookmark = () => {
+    if (!activeTab?.url || isNewTabUrl(activeTab.url)) {
+      return;
     }
-    actions.push(
-      {
-        label: isDesktopMode ? '🔁 Mode mobile (situs ini)' : '🖥 Mode desktop (situs ini)',
-        icon: 'expand',
-        onPress: toggleDesktopMode,
+    if (bookmark) {
+      dispatch({ type: 'DEL_BOOKMARK', id: bookmark.id });
+      return;
+    }
+    dispatch({
+      type: 'ADD_BOOKMARK',
+      bookmark: {
+        id: `bm-${Date.now().toString(36)}`,
+        url: activeTab.url,
+        title: activeTab.title || hostOfUrl(activeTab.url),
       },
-      {
-        label: compact ? 'Keluar mode kompak' : 'Mode kompak (bebas bar)',
-        icon: compact ? 'eyeOff' : 'eye',
-        onPress: () => dispatch({ type: 'SET_UI', patch: { compact: !compact } }),
-      },
-      {
-        label: bookmark ? 'Hapus bookmark' : 'Bookmark halaman ini',
-        icon: bookmark ? 'starFilled' : 'star',
-        onPress: () => {
-          if (!activeTab?.url) {
-            return;
-          }
-          if (bookmark) {
-            dispatch({ type: 'DEL_BOOKMARK', id: bookmark.id });
-          } else {
-            dispatch({
-              type: 'ADD_BOOKMARK',
-              bookmark: {
-                id: `bm-${Date.now().toString(36)}`,
-                url: activeTab.url,
-                title: activeTab.title || hostOfUrl(activeTab.url),
-              },
-            });
-          }
-        },
-      },
-      {
-        label: 'Bagikan tautan',
-        icon: 'share',
-        onPress: () => activeTab?.url && Share.share({ message: activeTab.url }).catch(() => {}),
-      },
-      { label: 'Muat ulang', icon: 'refresh', onPress: () => activeTab && getWebView(activeTab.id)?.reload() },
-      { label: 'Unduhan', icon: 'download', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'downloads' }) },
-      { label: 'Skrip', icon: 'code', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'scripts' }) },
-      { label: 'Ekstensi', icon: 'puzzle', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'extensions' }) },
-      { label: 'Pengaturan situs', icon: 'globe', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'siteSettings' }) },
-      { label: 'Pengaturan', icon: 'gear', onPress: () => dispatch({ type: 'SET_SCREEN', screen: 'settings' }) },
-    );
-    return actions;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splitActive, compact, bookmark, isDesktopMode, activeTab?.id, activeTab?.url]);
+    });
+  };
+
+  const findInPage = (q: string) => {
+    const wv = activeTab && getWebView(activeTab.id);
+    if (!wv) {
+      ToastAndroid.show('Buka halaman dulu', ToastAndroid.SHORT);
+      return;
+    }
+    const js =
+      `(function(){var q=${JSON.stringify(q)};try{if(window.find&&window.find(q,false,false,true))return true;}catch(e){}` +
+      `var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);var n,l=q.toLowerCase();` +
+      `while((n=w.nextNode())){var i=(n.nodeValue||'').toLowerCase().indexOf(l);if(i>=0){var r=document.createRange();` +
+      `r.setStart(n,i);r.setEnd(n,Math.min(n.nodeValue.length,i+q.length));var s=window.getSelection();` +
+      `s.removeAllRanges();s.addRange(r);if(n.parentElement)n.parentElement.scrollIntoView({block:'center'});return true;}}return true;})();true;`;
+    wv.injectJavaScript(js);
+  };
 
   const linkActions: SheetAction[] = useMemo(() => {
     const lm = state.ui.linkMenu;
@@ -262,9 +247,17 @@ export function BrowserScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ui.linkMenu?.url]);
 
-  const renderTab = (tab: Tab, forceActive = false) => (
-    <TabView key={tab.id} tab={tab} active={forceActive || tab.id === state.activeTabId} theme={theme} />
-  );
+  const renderTab = (tab: Tab, forceActive = false) => {
+    const shown = forceActive || tab.id === state.activeTabId;
+    if (isNewTabUrl(tab.url)) {
+      return (
+        <View key={tab.id} style={{ flex: 1, display: shown ? 'flex' : 'none' }}>
+          <NewTabPage theme={theme} tab={tab} />
+        </View>
+      );
+    }
+    return <TabView key={tab.id} tab={tab} active={shown} theme={theme} />;
+  };
 
   // ---------- elemen bar ----------
   const progressBar =
@@ -378,10 +371,10 @@ export function BrowserScreen() {
           borderWidth: 1,
           borderColor: isDesktopMode ? theme.accent : theme.border,
         })}>
-        {activeTab?.url.startsWith('https://') ? (
+        {!onNewTabPage && activeTab?.url.startsWith('https://') ? (
           <Icon name="lock" size={13} color={theme.ok} />
         ) : (
-          <Icon name="globe" size={14} color={theme.subtext} />
+          <Icon name="search" size={14} color={theme.subtext} />
         )}
         {isDesktopMode ? (
           <View
@@ -404,31 +397,15 @@ export function BrowserScreen() {
             marginHorizontal: 8,
             fontWeight: '600',
           }}>
-          {activeTab ? host || activeTab.url : 'Cari atau ketik URL'}
+          {onNewTabPage ? 'Cari atau ketik alamat' : host || activeTab?.url}
         </Text>
         {activeTab?.loading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
       </Pressable>
 
       {/* BOOKMARK */}
       <Pressable
-        onPress={() => {
-          if (!activeTab?.url) {
-            return;
-          }
-          if (bookmark) {
-            dispatch({ type: 'DEL_BOOKMARK', id: bookmark.id });
-          } else {
-            dispatch({
-              type: 'ADD_BOOKMARK',
-              bookmark: {
-                id: `bm-${Date.now().toString(36)}`,
-                url: activeTab.url,
-                title: activeTab.title || host,
-              },
-            });
-          }
-        }}
-        disabled={!activeTab}
+        onPress={toggleBookmark}
+        disabled={!activeTab || onNewTabPage}
         hitSlop={6}
         style={({ pressed }) => ({
           width: 34,
@@ -479,7 +456,7 @@ export function BrowserScreen() {
         }}
       />
       <Pressable
-        onPress={() => openOmniboxNew()}
+        onPress={() => openFreshTab()}
         hitSlop={4}
         style={({ pressed }) => ({
           width: 46,
@@ -705,7 +682,7 @@ export function BrowserScreen() {
       {/* ---------- konten ---------- */}
       <View style={{ flex: 1 }}>
         {empty ? (
-          <StartOverlay />
+          <NewTabPage theme={theme} />
         ) : wsEmptyButTabsExist ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
             <Icon name="folder" size={40} color={theme.subtext} />
@@ -776,7 +753,6 @@ export function BrowserScreen() {
                   ? `${(download.done / 1048576).toFixed(1)} / ${(download.total / 1048576).toFixed(1)} MB`
                   : `${(download.done / 1048576).toFixed(1)} MB`}
                 {download.speed > 0 ? ` • ${(download.speed / 1048576).toFixed(1)} MB/s` : ''}
-                {' • multi-thread'}
               </Text>
             </View>
             <Icon name="chevronRight" size={18} color={theme.subtext} />
@@ -812,7 +788,40 @@ export function BrowserScreen() {
       <GlanceView theme={theme} />
       <TabSwitcher theme={theme} />
       {shieldsSheet}
-      <ActionSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title="Menu" actions={menuActions} theme={theme} />
+      <FirefoxMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        theme={theme}
+        canBack={!!activeTab?.canGoBack}
+        canForward={!!activeTab?.canGoForward}
+        canPage={!!activeTab && !isNewTabUrl(activeTab.url)}
+        bookmarked={!!bookmark && !onNewTabPage}
+        desktop={isDesktopMode}
+        compact={compact}
+        splitActive={splitActive}
+        extensions={state.extensions}
+        onBack={() => activeTab && getWebView(activeTab.id)?.goBack()}
+        onForward={() => activeTab && getWebView(activeTab.id)?.goForward()}
+        onShare={() => activeTab?.url && !isNewTabUrl(activeTab.url) && Share.share({ message: activeTab.url }).catch(() => {})}
+        onReload={() => activeTab && getWebView(activeTab.id)?.reload()}
+        onBookmark={toggleBookmark}
+        onToggleDesktop={toggleDesktopMode}
+        onFind={findInPage}
+        onToggleExtension={(id, enabled) => dispatch({ type: 'UPDATE_EXTENSION', id, patch: { enabled } })}
+        onManageExtensions={() => dispatch({ type: 'SET_SCREEN', screen: 'extensions' })}
+        onHistory={() => dispatch({ type: 'SET_SCREEN', screen: 'history' })}
+        onBookmarks={() => dispatch({ type: 'SET_SCREEN', screen: 'bookmarks' })}
+        onDownloads={() => dispatch({ type: 'SET_SCREEN', screen: 'downloads' })}
+        onPasswords={() => dispatch({ type: 'SET_SCREEN', screen: 'passwords' })}
+        onAccount={() => dispatch({ type: 'SET_SCREEN', screen: 'account' })}
+        onSettings={() => dispatch({ type: 'SET_SCREEN', screen: 'settings' })}
+        onNewTab={() => openFreshTab(false)}
+        onPrivateTab={() => openFreshTab(true)}
+        onSplit={() => (splitActive ? dispatch({ type: 'SET_SPLIT', ids: [] }) : doSplit())}
+        onCompact={() => dispatch({ type: 'SET_UI', patch: { compact: !compact } })}
+        onScripts={() => dispatch({ type: 'SET_SCREEN', screen: 'scripts' })}
+        onSiteSettings={() => dispatch({ type: 'SET_SCREEN', screen: 'siteSettings' })}
+      />
       <ActionSheet
         visible={!!state.ui.linkMenu}
         onClose={() => dispatch({ type: 'SET_UI', patch: { linkMenu: null } })}
@@ -825,133 +834,3 @@ export function BrowserScreen() {
   );
 }
 
-// ---------------------------------------------------------------- awal (Zen: tanpa homepage)
-
-function StartOverlay() {
-  const { state, dispatch, openNewTab } = useStore();
-  const theme = useTheme(state.settings.theme);
-  const hour = new Date().getHours();
-  const greeting =
-    hour < 4 ? 'Selamat malam' : hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 19 ? 'Selamat sore' : 'Selamat malam';
-
-  const quickLinks = [
-    { label: 'Google', url: 'https://www.google.com' },
-    { label: 'Brave', url: 'https://search.brave.com' },
-    { label: 'DuckDuckGo', url: 'https://duckduckgo.com' },
-    { label: 'Wikipedia', url: 'https://id.wikipedia.org' },
-    { label: 'YouTube', url: 'https://m.youtube.com' },
-  ];
-
-  const openOmnibox = () =>
-    dispatch({ type: 'SET_OMNIBOX', patch: { open: true, mode: 'new', initial: '', incognito: false } });
-
-  return (
-    <ScrollView
-      contentContainerStyle={{
-        flexGrow: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: spacing.xl,
-        gap: spacing.lg,
-      }}>
-      <View
-        style={{
-          width: 78,
-          height: 78,
-          borderRadius: 24,
-          backgroundColor: theme.accentSoft,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: theme.accent,
-        }}>
-        <Text style={{ fontSize: 36, fontWeight: '900', color: theme.accent }}>Z</Text>
-        <Text style={{ position: 'absolute', right: 12, bottom: 10, fontSize: 17 }}>🩷</Text>
-      </View>
-      <View style={{ alignItems: 'center' }}>
-        <Text style={{ color: theme.text, fontSize: 23, fontWeight: '800' }}>{greeting}</Text>
-        <Text style={{ color: theme.subtext, fontSize: 13.5, marginTop: 4, textAlign: 'center' }}>
-          Zenith — ketuk untuk mencari atau mengetik URL
-        </Text>
-      </View>
-
-      <Pressable
-        onPress={openOmnibox}
-        style={({ pressed }) => ({
-          flexDirection: 'row',
-          alignItems: 'center',
-          width: '100%',
-          maxWidth: 440,
-          backgroundColor: pressed ? theme.surface2 : theme.surface,
-          borderRadius: radius.pill,
-          paddingHorizontal: 18,
-          height: 52,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: theme.border,
-          elevation: 3,
-        })}>
-        <Icon name="search" size={19} color={theme.subtext} />
-        <Text style={{ color: theme.subtext, fontSize: 15.5, marginLeft: 12 }}>Cari atau ketik URL</Text>
-        <View style={{ flex: 1 }} />
-        <Icon name="forward" size={16} color={theme.accent} />
-      </Pressable>
-
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-        {quickLinks.map((l) => (
-          <Pressable
-            key={l.url}
-            onPress={() => openNewTab(l.url)}
-            style={{
-              paddingHorizontal: 14,
-              paddingVertical: 8,
-              borderRadius: radius.pill,
-              backgroundColor: theme.pill,
-              borderWidth: StyleSheet.hairlineWidth,
-              borderColor: theme.border,
-            }}>
-            <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600' }}>{l.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {state.bookmarks.length > 0 ? (
-        <View style={{ width: '100%', maxWidth: 440, marginTop: spacing.sm }}>
-          <Text
-            style={{
-              color: theme.subtext,
-              fontSize: 12,
-              fontWeight: '700',
-              textTransform: 'uppercase',
-              letterSpacing: 0.6,
-              marginBottom: 8,
-            }}>
-            Bookmark
-          </Text>
-          {state.bookmarks.slice(0, 5).map((b) => (
-            <Pressable
-              key={b.id}
-              onPress={() => openNewTab(b.url)}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                alignItems: 'center',
-                padding: 12,
-                borderRadius: radius.sm,
-                backgroundColor: pressed ? theme.surface2 : theme.surface,
-                marginBottom: 6,
-              })}>
-              <Icon name="bookmark" size={16} color={theme.accent} />
-              <View style={{ marginLeft: 10, flex: 1 }}>
-                <Text numberOfLines={1} style={{ color: theme.text, fontSize: 14, fontWeight: '600' }}>
-                  {b.title || b.url}
-                </Text>
-                <Text numberOfLines={1} style={{ color: theme.subtext, fontSize: 11.5 }}>
-                  {b.url}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-    </ScrollView>
-  );
-}

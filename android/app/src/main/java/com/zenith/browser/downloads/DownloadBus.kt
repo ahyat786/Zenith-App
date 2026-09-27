@@ -44,7 +44,9 @@ object DownloadBus {
             req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
             req.setTitle(filename)
-            req.setMimeType(mime)
+            req.setMimeType(
+                if (filename.endsWith(".apk", true)) "application/vnd.android.package-archive" else mime,
+            )
             (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
         } catch (_: Throwable) {
             // perangkat lama tanpa izin tulis — diabaikan; pengguna bisa

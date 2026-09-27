@@ -108,6 +108,7 @@ type Action =
   | { type: 'UPDATE_EXTENSION'; id: string; patch: Partial<Extension> }
   | { type: 'DEL_EXTENSION'; id: string }
   | { type: 'ADD_HISTORY'; item: HistoryItem }
+  | { type: 'DEL_HISTORY'; url: string; at: number }
   | { type: 'CLEAR_HISTORY' }
   | { type: 'ADD_BOOKMARK'; bookmark: Bookmark }
   | { type: 'DEL_BOOKMARK'; id: string }
@@ -368,6 +369,11 @@ function reducer(state: AppState, action: Action): AppState {
       const history = [item, ...filtered].slice(0, 500);
       return { ...state, history };
     }
+    case 'DEL_HISTORY':
+      return {
+        ...state,
+        history: state.history.filter((h) => h.url !== action.url || h.at !== action.at),
+      };
     case 'CLEAR_HISTORY':
       return { ...state, history: [] };
     case 'ADD_BOOKMARK':

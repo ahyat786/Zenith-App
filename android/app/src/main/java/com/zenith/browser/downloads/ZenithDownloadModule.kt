@@ -1,23 +1,26 @@
 package com.zenith.browser.downloads
 
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import android.provider.Settings
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.Closeable
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
@@ -30,12 +33,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Unduhan cepat multi-thread (4 koneksi + Range paralel).
+ * Unduhan cepat ke berkas sungguhan, lalu salin ke Download/Zenith.
  *
- * Tujuan penyimpanan:
- *  - Android 10+ (API 29): folder Download/Zenith PUBLIK via MediaStore
- *    (tanpa izin apa pun — terlihat di aplikasi File / galeri unduhan).
- *  - Android 7–9: folder milik aplikasi (fallback), dibuka via FileProvider.
+ * APK (dan aset GitHub) gagal di versi lama karena probe Range bytes=0-0
+ * membatalkan seluruh tugas, dan MediaStore menolak MIME paket. Di sini
+ * pengalihan diikuti manual dengan header Range tetap terpasang, UA Chrome,
+ * tulis paralel ke berkas aplikasi (maks. 4 koneksi, hanya bila server
+ * mendukung Range), lalu dipublikasikan. Riwayat disimpan di filesDir.
  */
 class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -43,46 +47,59 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     companion object {
         const val NAME = "ZenithDownloads"
         const val EVENT = "ZenithDownloadProgress"
-        private const val PART_RETRIES = 4
+        private const val PART_RETRIES = 3
+        private const val UA =
+            "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+        private const val MULTI_MIN = 2L * 1048576
     }
 
     class Job(
         val id: String,
         val url: String,
-        val uri: Uri?, // target MediaStore (API 29+)
-        val file: File?, // target legacy (fallback)
+        var uri: Uri?,
+        var file: File?,
         val mime: String,
         val threads: Int,
+        val name: String,
     ) {
         val cancel = AtomicBoolean(false)
+        val userCancel = AtomicBoolean(false)
         val done = AtomicLong(0)
         @Volatile var total: Long = -1
         @Volatile var speed: Long = 0
         @Volatile var status: String = "connecting"
         @Volatile var error: String? = null
         @Volatile var lastDone: Long = 0
-        val displayName: String get() = file?.name ?: uri?.lastPathSegment ?: "unduhan"
+        @Volatile var finishedAt: Long = 0
+        @Volatile var fetchUrl: String = url
+        val displayName: String get() = name
     }
+
+    private data class Resolved(
+        val url: String,
+        val code: Int,
+        val total: Long,
+        val contentType: String?,
+    )
 
     private val jobs = ConcurrentHashMap<String, Job>()
     private val pool = Executors.newCachedThreadPool()
     private val reporter = Executors.newSingleThreadScheduledExecutor()
+    private val historyLock = Any()
 
     init {
+        loadHistory()
         DownloadBus.module = this
         DownloadBus.drainPending()
-        reporter.scheduleAtFixedRate(::reportAll, 600, 600, java.util.concurrent.TimeUnit.MILLISECONDS)
+        reporter.scheduleAtFixedRate(::reportAll, 500, 500, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     override fun getName(): String = NAME
 
-    // ------------------------------------------------------------ API RN
-
     @ReactMethod
     fun start(url: String, filename: String?, mime: String?, connections: Int, promise: Promise) {
         try {
-            val id = enqueue(url, filename, mime, connections)
-            promise.resolve(id)
+            promise.resolve(enqueue(url, filename, mime, connections))
         } catch (t: Throwable) {
             promise.reject("ZENITH_DL", t.message ?: t.toString(), t)
         }
@@ -90,14 +107,21 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun cancel(id: String, promise: Promise) {
-        jobs[id]?.let { it.cancel.set(true) }
+        jobs[id]?.let {
+            it.userCancel.set(true)
+            it.cancel.set(true)
+        }
         promise.resolve(true)
     }
 
     @ReactMethod
     fun list(promise: Promise) {
-        val arr = com.facebook.react.bridge.Arguments.createArray()
-        for (job in jobs.values) {
+        val arr = Arguments.createArray()
+        val sorted = jobs.values.sortedWith(
+            compareBy<Job> { if (it.status == "connecting" || it.status == "downloading") 0 else 1 }
+                .thenByDescending { it.finishedAt },
+        )
+        for (job in sorted) {
             arr.pushMap(jobToMap(job))
         }
         promise.resolve(arr)
@@ -107,15 +131,11 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     fun open(id: String, promise: Promise) {
         val job = jobs[id]
         if (job == null || !existsTarget(job)) {
-            promise.resolve(false)
+            promise.reject("ZENITH_DL_OPEN", "Berkas tidak ada di perangkat.")
             return
         }
         try {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(targetUri(job), job.mime.ifBlank { "*/*" })
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            reactApplicationContext.startActivity(intent)
+            openJob(job)
             promise.resolve(true)
         } catch (t: Throwable) {
             promise.reject("ZENITH_DL_OPEN", t.message ?: t.toString(), t)
@@ -125,18 +145,21 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun share(id: String, promise: Promise) {
         val job = jobs[id]
-        if (job == null || !existsTarget(job)) {
-            promise.resolve(false)
+        if (job == null || job.file?.exists() != true) {
+            promise.reject("ZENITH_DL_SHARE", "Berkas tidak ada di perangkat.")
             return
         }
         try {
+            val uri = fileUri(job.file!!)
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = job.mime.ifBlank { "*/*" }
-                putExtra(Intent.EXTRA_STREAM, targetUri(job))
+                type = viewMime(job)
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newRawUri(job.name, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            grantToMatches(intent, uri)
             reactApplicationContext.startActivity(
-                Intent.createChooser(intent, job.displayName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent.createChooser(intent, job.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
             promise.resolve(true)
         } catch (t: Throwable) {
@@ -144,17 +167,21 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    /** deleteFile=false hanya menghapus baris riwayat; berkas di disk tetap. */
     @ReactMethod
-    fun remove(id: String, promise: Promise) {
-        jobs[id]?.let { job ->
+    fun remove(id: String, deleteFile: Boolean, promise: Promise) {
+        val job = jobs.remove(id)
+        if (job != null) {
+            job.userCancel.set(true)
             job.cancel.set(true)
-            deleteTarget(job)
-            jobs.remove(id)
+            if (deleteFile) {
+                deleteTarget(job)
+            }
+            persist()
         }
         promise.resolve(true)
     }
 
-    /** fast=false → WebView memakai DownloadManager sistem. */
     @ReactMethod
     fun setEnabled(enabled: Boolean, promise: Promise) {
         DownloadBus.fastEnabled = enabled
@@ -162,191 +189,313 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun addListener(eventName: String) { /* wajib ada utk NativeEventEmitter */ }
+    fun addListener(eventName: String) { /* wajib untuk NativeEventEmitter */ }
 
     @ReactMethod
-    fun removeListeners(count: Int) { /* wajib ada utk NativeEventEmitter */ }
-
-    // ------------------------------------------------------------ target
-
-    private fun legacyFile(name: String): File {
-        val dir = File(
-            reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                ?: reactApplicationContext.filesDir,
-            "Zenith",
-        ).apply { mkdirs() }
-        var f = File(dir, name)
-        var i = 1
-        val base = f.nameWithoutExtension
-        val ext = f.extension
-        while (f.exists()) {
-            f = File(dir, if (ext.isBlank()) "${base} ($i)" else "${base} ($i).$ext")
-            i++
-        }
-        return f
-    }
-
-    private fun createTarget(name: String, mime: String): Pair<Uri?, File?> {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                    put(MediaStore.MediaColumns.MIME_TYPE, mime)
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Zenith")
-                    put(MediaStore.MediaColumns.IS_PENDING, 1)
-                }
-                val uri = reactApplicationContext.contentResolver
-                    .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                if (uri != null) {
-                    return uri to null
-                }
-            } catch (_: Throwable) {
-                // jatuh ke legacy
-            }
-        }
-        return null to legacyFile(name)
-    }
-
-    private fun targetUri(job: Job): Uri =
-        job.uri ?: FileProvider.getUriForFile(
-            reactApplicationContext,
-            "${reactApplicationContext.packageName}.zenithprovider",
-            job.file!!,
-        )
-
-    private fun existsTarget(job: Job): Boolean =
-        if (job.uri != null) true else (job.file?.exists() == true)
-
-    private fun deleteTarget(job: Job) {
-        job.uri?.let { uri ->
-            try {
-                reactApplicationContext.contentResolver.delete(uri, null, null)
-            } catch (_: Throwable) {
-            }
-        } ?: run {
-            job.file?.delete()
-        }
-    }
-
-    private fun finishTarget(job: Job) {
-        job.uri?.let { uri ->
-            try {
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.IS_PENDING, 0)
-                }
-                reactApplicationContext.contentResolver.update(uri, values, null, null)
-            } catch (_: Throwable) {
-            }
-        }
-    }
-
-    /** Pegangan keluaran seekable (utk multi-thread) — FileChannel kompatibel API 24+. */
-    private class OutputHandle(val channel: FileChannel, private val pfd: ParcelFileDescriptor?) : Closeable {
-        override fun close() {
-            try { channel.close() } catch (_: Throwable) {}
-            try { pfd?.close() } catch (_: Throwable) {}
-        }
-    }
-
-    /** Buka target unduhan sebagai channel seekable (mendukung seek utk multi-thread). */
-    private fun openOutput(job: Job): OutputHandle {
-        job.uri?.let { uri ->
-            val pfd = reactApplicationContext.contentResolver.openFileDescriptor(uri, "rw")
-                ?: throw IOException("tidak dapat membuka target unduhan")
-            return OutputHandle(FileOutputStream(pfd.fileDescriptor).channel, pfd)
-        }
-        return OutputHandle(RandomAccessFile(job.file!!, "rw").channel, null)
-    }
-
-    // ------------------------------------------------------------ inti
+    fun removeListeners(count: Int) { /* wajib untuk NativeEventEmitter */ }
 
     fun enqueue(url: String, filenameIn: String?, mime: String?, connections: Int): String {
-        var name = (filenameIn ?: "unduhan").replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
-        if (name.isEmpty()) {
-            name = "unduhan"
-        }
         val guessedMime = mime?.takeIf { it.isNotBlank() }
-            ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(File(name).extension)
             ?: "application/octet-stream"
-        val (uri, file) = createTarget(name, guessedMime)
+        val name = cleanName(filenameIn, guessedMime, url)
+        val file = uniqueAppFile(name)
+        file.createNewFile()
         val id = System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
-        val job = Job(id, url, uri, file, guessedMime, connections.coerceIn(1, 8))
+        val job = Job(id, url, null, file, guessedMime, connections.coerceIn(1, 4), name)
         jobs[id] = job
+        persist()
         emit(job)
         pool.execute { runJob(job) }
         return id
     }
 
-    private fun openConn(url: String, rangeFrom: Long, rangeTo: Long): HttpURLConnection {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 15000
-        conn.readTimeout = 20000
-        conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "ZenithBrowser/0.3 Mozilla/5.0 (Linux; Android)")
+    private fun appDir(): File {
+        val base = reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: reactApplicationContext.filesDir
+        return File(base, "Zenith").apply { mkdirs() }
+    }
+
+    private fun uniqueAppFile(name: String): File {
+        val dir = appDir()
+        var f = File(dir, name)
+        var i = 1
+        val base = f.nameWithoutExtension.ifBlank { "unduhan" }
+        val ext = f.extension
+        while (f.exists()) {
+            f = File(dir, if (ext.isBlank()) "$base ($i)" else "$base ($i).$ext")
+            i++
+        }
+        return f
+    }
+
+    private fun cleanName(raw: String?, mime: String, url: String): String {
+        var name = (raw ?: "").replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+        val generic = name.isEmpty() || name.equals("download", true) || name.equals("unknown", true) || name.equals("unduhan", true)
+        if (generic) {
+            val seg = Uri.parse(url).lastPathSegment
+                ?.substringBefore('?')
+                ?.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                ?.trim()
+            if (!seg.isNullOrBlank()) {
+                name = seg
+            }
+        }
+        if (name.isEmpty()) {
+            name = "unduhan"
+        }
+        val hasExt = name.contains('.') && name.substringAfterLast('.').length in 1..8
+        if (!hasExt) {
+            val urlExt = Uri.parse(url).lastPathSegment
+                ?.substringBefore('?')
+                ?.substringAfterLast('.', "")
+                ?: ""
+            val mimeExt = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
+            val ext = when {
+                mime.contains("package-archive") || url.contains(".apk", true) -> "apk"
+                urlExt.length in 1..8 && !urlExt.contains('/') -> urlExt
+                !mimeExt.isNullOrBlank() -> mimeExt
+                else -> ""
+            }
+            if (ext.isNotEmpty()) {
+                name = "$name.$ext"
+            }
+        }
+        if ((mime.contains("package-archive") || url.contains(".apk", true)) && !name.endsWith(".apk", true)) {
+            name += ".apk"
+        }
+        return name.take(160)
+    }
+
+    private fun applyHeaders(conn: HttpURLConnection, rangeFrom: Long, rangeTo: Long) {
+        conn.connectTimeout = 20000
+        conn.readTimeout = 60000
+        conn.instanceFollowRedirects = false
+        conn.setRequestProperty("User-Agent", UA)
+        conn.setRequestProperty("Accept", "*/*")
+        conn.setRequestProperty("Accept-Encoding", "identity")
+        conn.setRequestProperty("Accept-Language", "id,en;q=0.8")
+        try {
+            val cookie = android.webkit.CookieManager.getInstance().getCookie(conn.url?.toString())
+            if (!cookie.isNullOrBlank()) {
+                conn.setRequestProperty("Cookie", cookie)
+            }
+        } catch (_: Throwable) {
+        }
         if (rangeTo >= 0) {
             conn.setRequestProperty("Range", "bytes=$rangeFrom-$rangeTo")
         } else if (rangeFrom > 0) {
             conn.setRequestProperty("Range", "bytes=$rangeFrom-")
         }
-        return conn
+    }
+
+    /** Ikuti pengalihan sendiri supaya header Range tidak hilang (bug HttpURLConnection). */
+    private fun openConn(url: String, rangeFrom: Long, rangeTo: Long): HttpURLConnection {
+        var current = url
+        var hops = 0
+        while (hops < 8) {
+            val conn = URL(current).openConnection() as HttpURLConnection
+            applyHeaders(conn, rangeFrom, rangeTo)
+            val code = conn.responseCode
+            if (code in 300..399) {
+                val loc = conn.getHeaderField("Location")
+                conn.disconnect()
+                if (loc.isNullOrBlank()) {
+                    throw IOException("HTTP $code tanpa tujuan")
+                }
+                current = URL(URL(current), loc).toExternalForm()
+                hops++
+                continue
+            }
+            return conn
+        }
+        throw IOException("terlalu banyak pengalihan")
+    }
+
+    /** URL akhir setelah pengalihan, tanpa mengirim Range (probe bytes=0-0 merusak unduhan APK). */
+    private fun resolve(start: String): Resolved {
+        var current = start
+        var hops = 0
+        while (hops < 8) {
+            val conn = URL(current).openConnection() as HttpURLConnection
+            try {
+                applyHeaders(conn, -1, -1)
+                val code = conn.responseCode
+                if (code in 300..399) {
+                    val loc = conn.getHeaderField("Location")
+                        ?: return Resolved(current, code, -1, conn.contentType)
+                    current = URL(URL(current), loc).toExternalForm()
+                    hops++
+                    continue
+                }
+                return Resolved(current, code, conn.contentLengthLong, conn.contentType)
+            } finally {
+                conn.disconnect()
+            }
+        }
+        return Resolved(current, -1, -1, null)
+    }
+
+    private fun confirmRange(url: String): Long {
+        val conn = try {
+            openConn(url, 0, 1)
+        } catch (_: Throwable) {
+            return -1
+        }
+        try {
+            if (conn.responseCode != 206) {
+                return -1
+            }
+            val cr = conn.getHeaderField("Content-Range") ?: return -1
+            val m = Regex("/(\\d+)\\s*$").find(cr) ?: return -1
+            return m.groupValues[1].toLong()
+        } catch (_: Throwable) {
+            return -1
+        } finally {
+            conn.disconnect()
+        }
     }
 
     private fun runJob(job: Job) {
         try {
-            val probe = openConn(job.url, 0, 0)
-            val probeCode = probe.responseCode
-            val contentRange = probe.getHeaderField("Content-Range") // bytes 0-0/TOTAL
-            var total = probe.contentLengthLong
-            if (contentRange != null) {
-                val m = Regex("/(\\d+)\\s*$").find(contentRange)
-                if (m != null) {
-                    total = m.groupValues[1].toLong()
+            val resolved = try {
+                resolve(job.url)
+            } catch (_: Throwable) {
+                null
+            }
+            // Tetap mulai dari URL asli. Token CDN GitHub sering sekali pakai;
+            // tiap koneksi mengikuti pengalihan sendiri.
+            job.fetchUrl = job.url
+            if (resolved != null && resolved.code in 200..299 && resolved.total > 0) {
+                job.total = resolved.total
+            }
+            val ctype = resolved?.contentType ?: ""
+            if (resolved != null && (resolved.code == 401 || resolved.code == 403)) {
+                throw IOException("Server menolak unduhan (HTTP ${resolved.code}). Buka halaman sumber, lalu unduh lagi.")
+            }
+            if (job.name.endsWith(".apk", true) && ctype.contains("text/html", true)) {
+                throw IOException("Server mengembalikan halaman, bukan APK. Buka halaman rilis, lalu ketuk berkasnya.")
+            }
+            if (resolved != null && resolved.code == 404) {
+                throw IOException("Berkas tidak ditemukan (HTTP 404).")
+            }
+
+            var rangedTotal = -1L
+            if ((job.total > MULTI_MIN || job.total < 0) && job.threads > 1) {
+                rangedTotal = confirmRange(job.fetchUrl)
+                if (rangedTotal > 0) {
+                    job.total = rangedTotal
                 }
             }
-            probe.disconnect()
-            if (probeCode !in 200..299) {
-                throw IOException("HTTP $probeCode")
-            }
-            job.total = total
             job.status = "downloading"
             emit(job)
 
-            if (total > 4 * 1048576 && probeCode == 206) {
-                val n = job.threads
-                val slice = total / n
-                val workers = (0 until n).map { i ->
-                    val from = i * slice
-                    val to = if (i == n - 1) total - 1 else (i + 1) * slice - 1
-                    Thread { downloadPart(job, from, to) }
+            val useMulti = rangedTotal > MULTI_MIN && job.threads > 1 && !job.cancel.get()
+            if (useMulti) {
+                preallocate(job)
+                downloadParallel(job)
+                val short = job.total > 0 && job.done.get() < job.total - 4096
+                if ((short || job.error != null) && !job.userCancel.get()) {
+                    job.cancel.set(false)
+                    job.error = null
+                    job.done.set(0)
+                    resetFile(job)
+                    downloadPart(job, 0, -1)
                 }
-                workers.forEach { it.start() }
-                workers.forEach { it.join() }
             } else {
-                downloadPart(job, 0, if (total > 0) total - 1 else -1)
+                downloadPart(job, 0, -1)
             }
 
-            if (job.cancel.get()) {
+            if (jobs[job.id] == null) {
+                return
+            }
+            val len = job.file?.length() ?: 0L
+            val incomplete = job.total > 0 && len + 64 < job.total
+            if (job.userCancel.get()) {
                 job.status = "canceled"
+                job.finishedAt = System.currentTimeMillis()
                 deleteTarget(job)
-            } else if (job.total > 0 && job.done.get() < job.total) {
+            } else if (job.error != null || len <= 0L || incomplete) {
                 job.status = "error"
-                job.error = "unduhan tidak lengkap"
+                if (job.error == null) {
+                    job.error = if (len <= 0L) "Berkas kosong" else "Unduhan tidak lengkap"
+                }
+                job.finishedAt = System.currentTimeMillis()
                 deleteTarget(job)
             } else {
+                job.file?.let { f ->
+                    if (job.total < 0) {
+                        job.total = f.length()
+                    }
+                    job.uri = publishPublic(f, job.mime)
+                }
                 job.status = "done"
                 job.speed = 0
-                finishTarget(job)
+                job.done.set(job.file?.length() ?: job.done.get())
+                job.finishedAt = System.currentTimeMillis()
             }
+            persist()
             emit(job)
         } catch (t: Throwable) {
-            job.status = if (job.cancel.get()) "canceled" else "error"
+            if (jobs[job.id] == null) {
+                return
+            }
+            job.status = if (job.userCancel.get()) "canceled" else "error"
             if (job.error == null) {
                 job.error = t.message ?: t.toString()
             }
-            if (job.status == "error") {
+            job.finishedAt = System.currentTimeMillis()
+            if (job.status != "canceled") {
+                deleteTarget(job)
+            } else {
                 deleteTarget(job)
             }
+            persist()
             emit(job)
+        }
+    }
+
+    private fun preallocate(job: Job) {
+        val f = job.file ?: return
+        if (job.total <= 0) {
+            return
+        }
+        try {
+            RandomAccessFile(f, "rw").use { it.setLength(job.total) }
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun resetFile(job: Job) {
+        val f = job.file ?: return
+        try {
+            RandomAccessFile(f, "rw").use { it.setLength(0) }
+        } catch (_: Throwable) {
+            try {
+                f.delete()
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun downloadParallel(job: Job) {
+        val total = job.total
+        val n = job.threads.coerceIn(2, 4)
+        val slice = total / n
+        val workers = (0 until n).map { i ->
+            val from = i * slice
+            val to = if (i == n - 1) total - 1 else (i + 1) * slice - 1
+            Thread({ downloadPart(job, from, to) }, "zenith-dl-$i")
+        }
+        workers.forEach { it.start() }
+        workers.forEach { it.join() }
+    }
+
+    private class OutputHandle(val channel: FileChannel) : Closeable {
+        override fun close() {
+            try {
+                channel.close()
+            } catch (_: Throwable) {
+            }
         }
     }
 
@@ -356,29 +505,61 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         while (attempt < PART_RETRIES && !job.cancel.get() && (to < 0 || pos <= to)) {
             var conn: HttpURLConnection? = null
             try {
-                conn = openConn(job.url, pos, to)
+                conn = openConn(job.fetchUrl, if (to < 0 && pos == 0L) -1 else pos, to)
                 val code = conn.responseCode
-                if (code !in 200..299) {
-                    throw IOException("HTTP $code")
+                if (from > 0 && code != 206) {
+                    throw IOException("server menolak Range (HTTP $code)")
                 }
-                openOutput(job).use { out ->
-                    out.channel.position(pos)
-                    val buf = ByteArray(64 * 1024)
+                if (code !in 200..299) {
+                    val err = IOException(httpMessage(code))
+                    if (code == 401 || code == 403 || code == 404 || code == 416) {
+                        job.error = err.message
+                        job.cancel.set(true)
+                        return
+                    }
+                    throw err
+                }
+                if (from == 0L && code == 200) {
+                    val len = conn.contentLengthLong
+                    if (len > 0) {
+                        job.total = len
+                    }
+                }
+                val file = job.file ?: throw IOException("target unduhan hilang")
+                OutputHandle(RandomAccessFile(file, "rw").channel).use { out ->
+                    val buf = ByteArray(256 * 1024)
                     val input = conn.inputStream
                     while (!job.cancel.get()) {
-                        val read = input.read(buf)
+                        var read = input.read(buf)
                         if (read < 0) {
                             break
                         }
-                        out.channel.write(ByteBuffer.wrap(buf, 0, read))
+                        if (to >= 0 && pos + read - 1 > to) {
+                            read = (to - pos + 1).toInt()
+                        }
+                        if (read <= 0) {
+                            break
+                        }
+                        val bb = ByteBuffer.wrap(buf, 0, read)
+                        var p = pos
+                        while (bb.hasRemaining()) {
+                            val w = out.channel.write(bb, p)
+                            if (w <= 0) {
+                                throw IOException("gagal menulis berkas")
+                            }
+                            p += w
+                        }
                         job.done.addAndGet(read.toLong())
                         pos += read
+                        if (to >= 0 && pos > to) {
+                            break
+                        }
                     }
                 }
                 return
             } catch (t: Throwable) {
                 attempt++
-                if (attempt >= PART_RETRIES) {
+                if (attempt >= PART_RETRIES || job.cancel.get()) {
                     if (!job.cancel.get()) {
                         job.error = t.message ?: t.toString()
                         job.cancel.set(true)
@@ -386,7 +567,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                     return
                 }
                 try {
-                    Thread.sleep(700L * attempt)
+                    Thread.sleep(400L * attempt)
                 } catch (_: InterruptedException) {
                     return
                 }
@@ -396,26 +577,251 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    private fun httpMessage(code: Int): String = when (code) {
+        401, 403 -> "Server menolak unduhan (HTTP $code). Buka halaman sumber, lalu unduh lagi."
+        404 -> "Berkas tidak ditemukan (HTTP 404)."
+        416 -> "Server menolak permintaan Range."
+        else -> "HTTP $code"
+    }
+
+    private fun publishPublic(file: File, displayMime: String): Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return null
+        }
+        val resolver = reactApplicationContext.contentResolver
+        val mimes = LinkedHashSet<String>()
+        if (file.name.endsWith(".apk", true) || displayMime.contains("package-archive")) {
+            mimes.add("application/vnd.android.package-archive")
+            mimes.add("application/octet-stream")
+        } else {
+            if (displayMime.isNotBlank()) {
+                mimes.add(displayMime)
+            }
+            mimes.add("application/octet-stream")
+        }
+        for (mime in mimes) {
+            var uri: Uri? = null
+            try {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Zenith")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: continue
+                resolver.openOutputStream(uri)?.use { out ->
+                    file.inputStream().use { input -> input.copyTo(out, 256 * 1024) }
+                } ?: throw IOException("tidak dapat menulis MediaStore")
+                val done = ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    put(MediaStore.MediaColumns.SIZE, file.length())
+                }
+                resolver.update(uri, done, null, null)
+                return uri
+            } catch (_: Throwable) {
+                uri?.let {
+                    try {
+                        resolver.delete(it, null, null)
+                    } catch (_: Throwable) {
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun fileUri(file: File): Uri =
+        FileProvider.getUriForFile(
+            reactApplicationContext,
+            "${reactApplicationContext.packageName}.zenithprovider",
+            file,
+        )
+
+    private fun viewMime(job: Job): String {
+        if (job.name.endsWith(".apk", true) || job.mime.contains("package-archive")) {
+            return "application/vnd.android.package-archive"
+        }
+        return job.mime.ifBlank { "*/*" }
+    }
+
+    private fun isApk(job: Job): Boolean =
+        job.name.endsWith(".apk", true) || job.mime.contains("package-archive")
+
+    private fun openJob(job: Job) {
+        if (isApk(job) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val can = reactApplicationContext.packageManager.canRequestPackageInstalls()
+            if (!can) {
+                val settings = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${reactApplicationContext.packageName}"),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                reactApplicationContext.startActivity(settings)
+                throw IOException("Izinkan pemasangan aplikasi dari Zenith, lalu buka APK ini lagi.")
+            }
+        }
+        val file = job.file
+        if (file != null && file.exists()) {
+            try {
+                launchView(fileUri(file), viewMime(job), job.name)
+                return
+            } catch (t: Throwable) {
+                if (job.uri == null) {
+                    throw t
+                }
+            }
+        }
+        val uri = job.uri ?: throw IOException("Berkas tidak ada di perangkat.")
+        launchView(uri, viewMime(job), job.name)
+    }
+
+    private fun launchView(uri: Uri, mime: String, title: String) {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            clipData = ClipData.newRawUri(title, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        grantToMatches(intent, uri)
+        reactApplicationContext.startActivity(intent)
+    }
+
+    private fun grantToMatches(intent: Intent, uri: Uri) {
+        try {
+            val matches = reactApplicationContext.packageManager.queryIntentActivities(intent, 0)
+            for (ri in matches) {
+                reactApplicationContext.grantUriPermission(
+                    ri.activityInfo.packageName,
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun existsTarget(job: Job): Boolean =
+        job.file?.exists() == true || job.uri != null
+
+    private fun deleteTarget(job: Job) {
+        job.uri?.let { uri ->
+            try {
+                reactApplicationContext.contentResolver.delete(uri, null, null)
+            } catch (_: Throwable) {
+            }
+        }
+        job.uri = null
+        try {
+            job.file?.delete()
+        } catch (_: Throwable) {
+        }
+        job.file = null
+    }
+
+    private fun historyFile(): File = File(reactApplicationContext.filesDir, "zenith-downloads.json")
+
+    private fun persist() {
+        synchronized(historyLock) {
+            val arr = JSONArray()
+            for (job in jobs.values) {
+                val o = JSONObject()
+                o.put("id", job.id)
+                o.put("url", job.url)
+                o.put("name", job.name)
+                o.put("mime", job.mime)
+                o.put("status", job.status)
+                o.put("total", job.total)
+                o.put("done", job.done.get())
+                o.put("error", job.error ?: "")
+                o.put("finishedAt", job.finishedAt)
+                o.put("file", job.file?.absolutePath ?: "")
+                o.put("uri", job.uri?.toString() ?: "")
+                o.put("threads", job.threads)
+                arr.put(o)
+            }
+            val dest = historyFile()
+            val tmp = File(dest.parentFile, "zenith-downloads.json.tmp")
+            tmp.writeText(arr.toString())
+            if (!tmp.renameTo(dest)) {
+                dest.writeText(arr.toString())
+                tmp.delete()
+            }
+        }
+    }
+
+    private fun loadHistory() {
+        val f = historyFile()
+        if (!f.exists()) {
+            return
+        }
+        var dirty = false
+        try {
+            val arr = JSONArray(f.readText())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                var status = o.optString("status", "done")
+                var error = o.optString("error").ifBlank { null }
+                val path = o.optString("file")
+                var file = if (path.isNotBlank()) File(path) else null
+                if (status == "connecting" || status == "downloading") {
+                    status = "error"
+                    error = "Terputus saat aplikasi ditutup"
+                    try {
+                        file?.delete()
+                    } catch (_: Throwable) {
+                    }
+                    file = null
+                    dirty = true
+                }
+                val job = Job(
+                    o.getString("id"),
+                    o.optString("url"),
+                    o.optString("uri").takeIf { it.isNotBlank() }?.let { Uri.parse(it) },
+                    file?.takeIf { it.exists() },
+                    o.optString("mime"),
+                    o.optInt("threads", 1).coerceIn(1, 4),
+                    o.optString("name", "unduhan"),
+                )
+                job.status = status
+                job.total = o.optLong("total", -1)
+                job.done.set(o.optLong("done", 0))
+                job.error = error
+                job.finishedAt = o.optLong("finishedAt", 0)
+                if (job.finishedAt == 0L && status != "connecting" && status != "downloading") {
+                    job.finishedAt = System.currentTimeMillis()
+                }
+                jobs[job.id] = job
+            }
+        } catch (_: Throwable) {
+        }
+        if (dirty) {
+            persist()
+        }
+    }
+
     private fun reportAll() {
         for (job in jobs.values) {
             if (job.status == "downloading" || job.status == "connecting") {
                 val d = job.done.get()
-                job.speed = ((d - job.lastDone) * 1000) / 600
+                job.speed = ((d - job.lastDone) * 1000) / 500
                 job.lastDone = d
                 emit(job)
             }
         }
     }
 
+    private fun fileExists(job: Job): Boolean = job.file?.exists() == true || job.uri != null
+
     private fun jobToMap(job: Job): WritableMap {
-        val m = com.facebook.react.bridge.Arguments.createMap()
+        val m = Arguments.createMap()
         m.putString("id", job.id)
         m.putString("url", job.url)
-        m.putString("filename", job.displayName)
+        m.putString("filename", job.name)
         m.putString("path", job.uri?.toString() ?: job.file?.absolutePath ?: "")
+        m.putString("mime", job.mime)
         m.putDouble("total", job.total.toDouble())
         m.putDouble("done", job.done.get().toDouble())
         m.putDouble("speed", job.speed.toDouble())
+        m.putDouble("finishedAt", job.finishedAt.toDouble())
+        m.putBoolean("fileExists", fileExists(job))
         m.putString("status", job.status)
         job.error?.let { m.putString("error", it) }
         return m

@@ -24,6 +24,7 @@ import type { Theme } from '../theme';
 import { radius, spacing } from '../theme';
 import { fetchSuggestions, fuzzyScore } from '../core/suggest';
 import { getWebView } from './refs';
+import { isNewTabUrl } from './newtab';
 import { Icon, type IconName } from '../ui/Icon';
 
 interface SuggestionRow {
@@ -71,14 +72,24 @@ export function Omnibox({ theme }: { theme: Theme }) {
       close();
       return;
     }
-    if (omnibox.mode === 'new' || !activeTab) {
+    if (activeTab && isNewTabUrl(activeTab.url) && omnibox.mode !== 'new') {
+      dispatch({
+        type: 'UPDATE_TAB',
+        id: activeTab.id,
+        patch: { url, title: '', loading: true, progress: 0.08 },
+      });
+    } else if (omnibox.mode === 'new' || !activeTab) {
       openNewTab(url, { incognito: omnibox.incognito });
     } else {
       const wv = getWebView(activeTab.id);
       if (wv && url !== activeTab.url) {
         wv.injectJavaScript(`location.href=${JSON.stringify(url)};true;`);
       } else if (!wv) {
-        openNewTab(url);
+        dispatch({
+          type: 'UPDATE_TAB',
+          id: activeTab.id,
+          patch: { url, title: '', loading: true, progress: 0.08 },
+        });
       }
     }
     close();

@@ -24,6 +24,7 @@ import { ExtensionsScreen } from './src/screens/ExtensionsScreen';
 import { SiteSettingsScreen } from './src/screens/SiteSettingsScreen';
 import { DownloadsScreen } from './src/screens/DownloadsScreen';
 import { AboutScreen } from './src/screens/AboutScreen';
+import { AccountScreen, BookmarksScreen, HistoryScreen, PasswordsScreen } from './src/screens/LibraryScreens';
 
 interface EBProps {
   children: React.ReactNode;
@@ -113,6 +114,10 @@ function AppShell() {
       {state.ui.screen === 'siteSettings' ? <SiteSettingsScreen /> : null}
       {state.ui.screen === 'downloads' ? <DownloadsScreen /> : null}
       {state.ui.screen === 'about' ? <AboutScreen /> : null}
+      {state.ui.screen === 'history' ? <HistoryScreen /> : null}
+      {state.ui.screen === 'bookmarks' ? <BookmarksScreen /> : null}
+      {state.ui.screen === 'passwords' ? <PasswordsScreen /> : null}
+      {state.ui.screen === 'account' ? <AccountScreen /> : null}
     </View>
   );
 }

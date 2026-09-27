@@ -1,11 +1,10 @@
 /**
- * DownloadsScreen — manajer unduhan (cepat, multi-thread).
- * Menampilkan unduhan aktif (progres + kecepatan + batal), selesai
- * (buka / bagikan / hapus), dan mulai unduhan manual dari URL.
+ * Unduhan — riwayat tersimpan, dikelompokkan, dan hapus yang bisa
+ * memilih baris saja atau ikut menghapus berkas.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
@@ -13,6 +12,7 @@ import { Button, EmptyState, ListSection, Row, TextField } from '../ui/kit';
 import { Icon } from '../ui/Icon';
 import {
   cancelDownload,
+  downloadCategory,
   downloadsAvailable,
   listDownloads,
   openDownload,
@@ -20,8 +20,11 @@ import {
   shareDownload,
   startDownload,
   subscribeDownloads,
+  type DownloadCategory,
   type DownloadJob,
 } from '../core/downloads';
+
+const CATEGORIES: DownloadCategory[] = ['APK', 'Gambar', 'Video', 'Audio', 'Dokumen', 'Arsip', 'Lainnya'];
 
 function fmtBytes(n: number): string {
   if (n < 0) {
@@ -41,12 +44,28 @@ function fmtBytes(n: number): string {
 
 function fmtSpeed(n: number): string {
   if (n <= 0) {
-    return '—';
+    return '';
   }
   if (n < 1048576) {
     return `${(n / 1024).toFixed(0)} KB/s`;
   }
   return `${(n / 1048576).toFixed(1)} MB/s`;
+}
+
+function fmtWhen(ms?: number): string {
+  if (!ms) {
+    return '';
+  }
+  try {
+    return new Date(ms).toLocaleString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
 }
 
 export function DownloadsScreen() {
@@ -61,18 +80,26 @@ export function DownloadsScreen() {
 
   useEffect(() => {
     refresh();
-    const unsub = subscribeDownloads(() => {
-      // perbarui daftar (ringan; list() cepat)
+    return subscribeDownloads(() => {
       refresh();
     });
-    return unsub;
   }, [refresh]);
 
   const back = () => dispatch({ type: 'SET_SCREEN', screen: 'browser' });
 
   const active = jobs.filter((j) => j.status === 'connecting' || j.status === 'downloading');
-  const finished = jobs.filter((j) => j.status === 'done');
   const failed = jobs.filter((j) => j.status === 'error' || j.status === 'canceled');
+  const done = jobs.filter((j) => j.status === 'done');
+  const grouped = useMemo(() => {
+    const map = new Map<DownloadCategory, DownloadJob[]>();
+    for (const job of done) {
+      const cat = downloadCategory(job);
+      const list = map.get(cat) ?? [];
+      list.push(job);
+      map.set(cat, list);
+    }
+    return CATEGORIES.filter((c) => (map.get(c)?.length ?? 0) > 0).map((c) => ({ cat: c, items: map.get(c)! }));
+  }, [done]);
 
   const startManual = async () => {
     const u = url.trim();
@@ -80,8 +107,8 @@ export function DownloadsScreen() {
       Alert.alert('URL tidak valid', 'Masukkan URL unduhan http/https.');
       return;
     }
-    const ok = await startDownload(u);
-    if (!ok && !downloadsAvailable) {
+    const id = await startDownload(u);
+    if (!id && !downloadsAvailable) {
       Alert.alert('Tidak tersedia', 'Modul unduhan native tidak aktif di build ini.');
       return;
     }
@@ -89,12 +116,37 @@ export function DownloadsScreen() {
     refresh();
   };
 
+  const askRemove = (job: DownloadJob) => {
+    const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [
+      { text: 'Batal', style: 'cancel' },
+      { text: 'Hapus dari daftar', onPress: () => removeDownload(job.id, false).then(refresh) },
+    ];
+    if (job.fileExists !== false) {
+      buttons.push({
+        text: 'Hapus berkas',
+        style: 'destructive',
+        onPress: () => removeDownload(job.id, true).then(refresh),
+      });
+    }
+    Alert.alert(
+      'Hapus unduhan?',
+      job.fileExists === false
+        ? `${job.filename}\nBerkas sudah tidak ada. Hapus baris riwayat ini?`
+        : `${job.filename}\nHapus dari daftar saja, atau hapus berkas di perangkat juga?`,
+      buttons,
+    );
+  };
+
+  const openJob = async (job: DownloadJob) => {
+    try {
+      await openDownload(job.id);
+    } catch (e: any) {
+      Alert.alert('Tidak dapat membuka', String(e?.message ?? e));
+    }
+  };
+
   return (
-    <ScreenShell
-      title="Unduhan"
-      subtitle={downloadsAvailable ? 'Multi-thread — 4 koneksi paralel' : 'Modul native tidak tersedia'}
-      onBack={back}
-      theme={theme}>
+    <ScreenShell title="Unduhan" onBack={back} theme={theme}>
       {!downloadsAvailable ? (
         <EmptyState
           theme={theme}
@@ -104,21 +156,19 @@ export function DownloadsScreen() {
         />
       ) : null}
 
-      {/* mulai manual */}
       <ListSection title="Unduh dari URL" theme={theme}>
         <View style={{ padding: spacing.md }}>
           <TextField
             theme={theme}
             value={url}
             onChangeText={setUrl}
-            placeholder="https://contoh.com/berkas.zip"
+            placeholder="https://contoh.com/berkas.apk"
             keyboardType="url"
           />
           <Button label="⬇ Mulai unduhan" theme={theme} onPress={startManual} disabled={!downloadsAvailable} />
         </View>
       </ListSection>
 
-      {/* aktif */}
       <ListSection title={`Sedang berlangsung (${active.length})`} theme={theme}>
         {active.length === 0 ? (
           <View style={{ padding: spacing.md }}>
@@ -127,6 +177,7 @@ export function DownloadsScreen() {
         ) : (
           active.map((job, i) => {
             const pct = job.total > 0 ? Math.min(100, Math.round((job.done / job.total) * 100)) : -1;
+            const speed = fmtSpeed(job.speed);
             return (
               <View
                 key={job.id}
@@ -157,7 +208,7 @@ export function DownloadsScreen() {
                 <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 5 }}>
                   {job.status === 'connecting'
                     ? 'Menghubungkan…'
-                    : `${pct >= 0 ? pct + '% • ' : ''}${fmtBytes(job.done)}${job.total > 0 ? ' / ' + fmtBytes(job.total) : ''} • ${fmtSpeed(job.speed)}`}
+                    : `${pct >= 0 ? pct + '% · ' : ''}${fmtBytes(job.done)}${job.total > 0 ? ' / ' + fmtBytes(job.total) : ''}${speed ? ' · ' + speed : ''}`}
                 </Text>
               </View>
             );
@@ -165,72 +216,65 @@ export function DownloadsScreen() {
         )}
       </ListSection>
 
-      {/* selesai */}
-      <ListSection title={`Selesai (${finished.length})`} theme={theme}>
-        {finished.length === 0 ? (
-          <View style={{ padding: spacing.md }}>
-            <Text style={{ color: theme.subtext, fontSize: 13.5 }}>Belum ada unduhan selesai.</Text>
-          </View>
-        ) : (
-          finished.map((job) => (
-            <View key={job.id}>
-              <Row
-                theme={theme}
-                icon="check"
-                title={job.filename}
-                subtitle={`${fmtBytes(job.total > 0 ? job.total : job.done)} • ketuk untuk membuka`}
-                onPress={() => openDownload(job.id)}
-                right={
-                  <View style={{ flexDirection: 'row' }}>
-                    <Pressable hitSlop={8} onPress={() => shareDownload(job.id)} style={{ padding: 6 }}>
-                      <Icon name="share" size={17} color={theme.subtext} />
-                    </Pressable>
-                    <Pressable hitSlop={8} onPress={() => removeDownload(job.id)} style={{ padding: 6 }}>
-                      <Icon name="trash" size={17} color={theme.danger} />
-                    </Pressable>
-                  </View>
-                }
-              />
-            </View>
-          ))
-        )}
-      </ListSection>
+      {grouped.map(({ cat, items }) => (
+        <ListSection key={cat} title={`${cat} (${items.length})`} theme={theme}>
+          {items.map((job) => (
+            <Row
+              key={job.id}
+              theme={theme}
+              icon={cat === 'APK' ? 'phone' : 'check'}
+              title={job.filename}
+              subtitle={[fmtBytes(job.total > 0 ? job.total : job.done), fmtWhen(job.finishedAt), job.fileExists === false ? 'berkas sudah tidak ada' : 'ketuk untuk membuka']
+                .filter(Boolean)
+                .join(' · ')}
+              onPress={() => openJob(job)}
+              right={
+                <View style={{ flexDirection: 'row' }}>
+                  <Pressable hitSlop={8} onPress={() => shareDownload(job.id).catch((e) => Alert.alert('Tidak dapat berbagi', String(e?.message ?? e)))} style={{ padding: 6 }}>
+                    <Icon name="share" size={17} color={theme.subtext} />
+                  </Pressable>
+                  <Pressable hitSlop={8} onPress={() => askRemove(job)} style={{ padding: 6 }}>
+                    <Icon name="trash" size={17} color={theme.danger} />
+                  </Pressable>
+                </View>
+              }
+            />
+          ))}
+        </ListSection>
+      ))}
 
-      {/* gagal/dibatalkan */}
       {failed.length > 0 ? (
-        <ListSection title={`Dibatalkan / gagal (${failed.length})`} theme={theme}>
+        <ListSection title={`Gagal (${failed.length})`} theme={theme}>
           {failed.map((job) => (
             <Row
               key={job.id}
               theme={theme}
               icon="warning"
               title={job.filename}
-              subtitle={job.error ? `Gagal: ${job.error}` : 'Dibatalkan'}
-              onPress={() => startDownload(job.url)}
+              subtitle={job.error || (job.status === 'canceled' ? 'Dibatalkan' : 'Gagal')}
+              onPress={() => startDownload(job.url, job.filename, job.mime).then(refresh)}
               right={
-                <Pressable hitSlop={8} onPress={() => removeDownload(job.id)} style={{ padding: 6 }}>
+                <Pressable hitSlop={8} onPress={() => askRemove(job)} style={{ padding: 6 }}>
                   <Icon name="trash" size={17} color={theme.danger} />
                 </Pressable>
               }
             />
           ))}
-          <Row
-            theme={theme}
-            title="Coba lagi paling atas"
-            subtitle="Ketuk item batal/gagal untuk mengunduh ulang"
-            last
-          />
         </ListSection>
+      ) : null}
+
+      {done.length === 0 && failed.length === 0 ? (
+        <View style={{ padding: spacing.lg }}>
+          <Text style={{ color: theme.subtext, fontSize: 13.5 }}>Belum ada riwayat unduhan.</Text>
+        </View>
       ) : null}
 
       <View style={{ padding: spacing.lg }}>
         <Text style={{ color: theme.subtext, fontSize: 12, lineHeight: 18 }}>
-          Unduhan tersimpan di folder Download/Zenith — satu folder yang sama dengan
-          unduhan Android lainnya, terlihat di aplikasi File tanpa izin tambahan
-          (Android 10+). Android 9 dan lebih lama memakai penyimpanan aplikasi.
+          Riwayat tetap ada setelah aplikasi ditutup. Berkas selesai disimpan di Download/Zenith dan bisa dibuka dari aplikasi File.
+          Hapus dari daftar tidak menghapus berkas; pilih hapus berkas bila ingin menghilangkannya.
         </Text>
       </View>
     </ScreenShell>
   );
 }
-

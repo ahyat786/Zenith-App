@@ -23,6 +23,7 @@ import type { Tab } from '../types';
 import type { Theme } from '../theme';
 import { radius, spacing } from '../theme';
 import { hostOfUrl, useStore } from '../state/store';
+import { NEW_TAB_URL, isNewTabUrl } from './newtab';
 import { WORKSPACE_ICONS, uid } from '../state/defaults';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, Button, TextField, type SheetAction } from '../ui/kit';
@@ -42,7 +43,7 @@ function hostColor(host: string): string {
 const STALE_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari
 
 export function TabSwitcher({ theme }: { theme: Theme }) {
-  const { state, dispatch, activeTab } = useStore();
+  const { state, dispatch, activeTab, openNewTab } = useStore();
   const [ctxTab, setCtxTab] = useState<string | null>(null);
   const [ctxGroup, setCtxGroup] = useState<string | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
@@ -521,12 +522,8 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                     )}
                     <Pressable
                       onPress={() => {
-                        dispatch({
-                          type: 'SET_OMNIBOX',
-                          patch: { open: true, mode: 'new', initial: '', incognito: false },
-                        });
-                        // omnibox membuka tab baru di workspace aktif; tandai grup
                         (globalThis as any).__ZENITH_NEXT_GROUP = g.id;
+                        openNewTab(NEW_TAB_URL);
                         close();
                       }}
                       style={({ pressed }) => ({
@@ -685,7 +682,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
             small
             onPress={() => {
               close();
-              dispatch({ type: 'SET_OMNIBOX', patch: { open: true, mode: 'new', initial: '', incognito: false } });
+              openNewTab(NEW_TAB_URL);
             }}
           />
           <Button
@@ -695,7 +692,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
             small
             onPress={() => {
               close();
-              dispatch({ type: 'SET_OMNIBOX', patch: { open: true, mode: 'new', initial: '', incognito: true } });
+              openNewTab(NEW_TAB_URL, { incognito: true });
             }}
           />
           <Button
@@ -829,7 +826,8 @@ function TabCard({
   onContext: () => void;
   onClose: () => void;
 }) {
-  const host = hostOfUrl(tab.url) || tab.url || 'Tab baru';
+  const blank = isNewTabUrl(tab.url);
+  const host = blank ? 'Tab baru' : hostOfUrl(tab.url) || tab.url || 'Tab baru';
   const hc = hostColor(host);
   return (
     <Pressable
@@ -882,10 +880,10 @@ function TabCard({
         </Pressable>
       </View>
       <Text numberOfLines={2} style={{ color: theme.text, fontSize: 13.5, fontWeight: '600' }}>
-        {tab.title || host}
+        {blank ? 'Tab baru' : tab.title || host}
       </Text>
       <Text numberOfLines={1} style={{ color: theme.subtext, fontSize: 11.5, marginTop: 3 }}>
-        {host}
+        {blank ? 'Laman tab baru' : host}
       </Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
         {active ? (
