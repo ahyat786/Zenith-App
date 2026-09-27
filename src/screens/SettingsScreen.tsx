@@ -5,20 +5,9 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { Icon } from '../ui/Icon';
 
-function doohLabel(st: 'idle' | 'testing' | 'ok' | 'fail'): string {
-  if (st === 'testing') {
-    return 'Menguji DoH…';
-  }
-  if (st === 'ok') {
-    return 'DoH terjangkau — DNS terenkripsi bisa dipakai';
-  }
-  if (st === 'fail') {
-    return 'DoH terblokir/tak terjangkau dari jaringan ini';
-  }
-  return 'Uji DNS-over-HTTPS';
-}
 import { useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
@@ -34,6 +23,13 @@ import {
 import { adblockInit, adblockResetStats, adblockStats, openPrivateDnsSettings, type AdblockStats } from '../core/native';
 import { uid } from '../state/defaults';
 import type { SearchEngine } from '../types';
+import {
+  DNS_PRESETS,
+  DNS_SERVERS,
+  dnsServerById,
+  runDnsTest,
+  type DnsTestResult,
+} from '../core/dns';
 
 export function SettingsScreen() {
   const { state, dispatch } = useStore();
@@ -46,22 +42,42 @@ export function SettingsScreen() {
   const [listUrl, setListUrl] = useState('');
   const [listMode, setListMode] = useState<'replace' | 'merge'>('replace');
   const [importing, setImporting] = useState(false);
-  const [dohState, setDohState] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
 
-  const testDoh = async () => {
-    setDohState('testing');
+  // ---------- Jaringan & DNS Aman (Shield Guard) ----------
+  const dns = s.dns;
+  const [picker, setPicker] = useState<{ group: 'ns' | 'fb'; slot: number } | null>(null);
+  const [testHost, setTestHost] = useState('google.com');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<DnsTestResult | null>(null);
+
+  const setDns = (patch: Partial<typeof dns>) =>
+    dispatch({ type: 'SET_SETTINGS', patch: { dns: { ...dns, ...patch } } });
+
+  const applyPreset = (preset: 'id' | 'global') =>
+    setDns({ preset, nameservers: [...DNS_PRESETS[preset].nameservers], fallbacks: [...DNS_PRESETS[preset].fallbacks] });
+
+  const pickServer = (id: string) => {
+    if (!picker) {
+      return;
+    }
+    const key = picker.group === 'ns' ? 'nameservers' : 'fallbacks';
+    const arr = [...dns[key]];
+    arr[picker.slot] = id;
+    setDns({ [key]: arr, preset: 'custom' } as Partial<typeof dns>);
+    setPicker(null);
+  };
+
+  const runTest = async () => {
+    const host = testHost.trim().replace(/^https?:\/\//, '').split('/')[0];
+    if (!host) {
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 5000);
-      const res = await fetch('https://1.1.1.1/dns-query?name=example.com&type=A', {
-        headers: { Accept: 'application/dns-json' },
-        signal: ctrl.signal,
-      });
-      clearTimeout(t);
-      const data = await res.json();
-      setDohState(res.ok && data?.Answer ? 'ok' : 'fail');
-    } catch {
-      setDohState('fail');
+      setTestResult(await runDnsTest(dns, host));
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -302,6 +318,197 @@ export function SettingsScreen() {
         />
       </ListSection>
 
+      {/* ---------------- Jaringan & DNS Aman (Shield Guard) ---------------- */}
+      <ListSection title="Jaringan & DNS Aman (Shield Guard)" theme={theme}>
+        <View style={{ paddingHorizontal: spacing.md, paddingTop: 10, paddingBottom: 4 }}>
+          <Text style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '600', marginBottom: 8 }}>
+            Preset kelompok server
+          </Text>
+          <SegmentedControl
+            theme={theme}
+            value={dns.preset === 'custom' ? 'custom' : dns.preset}
+            onValueChange={(v) => {
+              if (v === 'id' || v === 'global') {
+                applyPreset(v);
+              }
+            }}
+            options={[
+              { value: 'id', label: '🇮🇩 Indonesia' },
+              { value: 'global', label: '🌍 Global' },
+              { value: 'custom', label: 'Kustom' },
+            ]}
+          />
+          {dns.preset === 'custom' ? (
+            <Text style={{ color: theme.subtext, fontSize: 11.5, marginTop: 6 }}>
+              Susunan kustom — ubah slot server di bawah untuk menyesuaikan.
+            </Text>
+          ) : null}
+        </View>
+
+        {/* --- kelompok server --- */}
+        {([
+          { key: 'ns' as const, title: 'NameServer — utama', ids: dns.nameservers, hint: 'Ditanya lebih dulu' },
+          { key: 'fb' as const, title: 'FallBack — cadangan', ids: dns.fallbacks, hint: 'Dipakai bila utama gagal / terindikasi dibajak' },
+        ]).map((g) => (
+          <View key={g.key} style={{ paddingHorizontal: spacing.md, paddingTop: 10 }}>
+            <View style={{ backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border, padding: 10 }}>
+              <Text style={{ color: theme.text, fontSize: 13.5, fontWeight: '800' }}>{g.title}</Text>
+              <Text style={{ color: theme.subtext, fontSize: 11.5, marginBottom: 4 }}>{g.hint}</Text>
+              {g.ids.map((id, i) => {
+                const d = dnsServerById(id);
+                return (
+                  <Pressable
+                    key={`${g.key}-${i}`}
+                    onPress={() => setPicker({ group: g.key, slot: i })}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: pressed ? theme.surface2 : theme.pill,
+                      borderRadius: 10,
+                      paddingHorizontal: 10,
+                      paddingVertical: 8,
+                      marginTop: 6,
+                    })}>
+                    <View
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 5,
+                        marginRight: 10,
+                        backgroundColor: g.key === 'ns' ? theme.accent : theme.warn,
+                      }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.text, fontSize: 13.5, fontWeight: '700' }}>
+                        {d?.name ?? 'Pilih server…'}
+                      </Text>
+                      <Text style={{ color: theme.subtext, fontSize: 11.5 }}>
+                        {d ? `${d.type} • ${d.ip ?? d.endpoint.replace(/^https?:\/\//, '')} : ${d.port}` : 'ketuk untuk memilih'}
+                        {d?.note ? ` — ${d.note}` : ''}
+                      </Text>
+                    </View>
+                    <Icon name="chevronDown" size={15} color={theme.subtext} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+
+        {/* --- uji resolusi --- */}
+        <View style={{ paddingHorizontal: spacing.md, paddingTop: 12 }}>
+          <View style={{ backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border, padding: 10 }}>
+            <Text style={{ color: theme.text, fontSize: 13.5, fontWeight: '800' }}>Uji resolusi DNS (DoH)</Text>
+            <Text style={{ color: theme.subtext, fontSize: 11.5, marginBottom: 6 }}>
+              Kueri wireformat asli (RFC 8484) — kompatibel semua server di atas.
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TextInput
+                value={testHost}
+                onChangeText={setTestHost}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="google.com"
+                placeholderTextColor={theme.subtext}
+                style={{
+                  flex: 1,
+                  color: theme.text,
+                  fontSize: 14,
+                  backgroundColor: theme.pill,
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                }}
+              />
+              <View style={{ marginLeft: 8 }}>
+                <Button label={testing ? 'Menguji…' : 'Uji'} theme={theme} small disabled={testing} onPress={runTest} />
+              </View>
+            </View>
+
+            {testing ? (
+              <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 8 }}>Menghubungi kelompok utama lalu cadangan…</Text>
+            ) : null}
+
+            {testResult ? (
+              <View style={{ marginTop: 8 }}>
+                <View
+                  style={{
+                    backgroundColor: testResult.hijacked
+                      ? theme.warn + '22'
+                      : testResult.answerIp
+                        ? theme.ok + '1c'
+                        : theme.surface2,
+                    borderRadius: 8,
+                    padding: 8,
+                    marginBottom: 6,
+                  }}>
+                  <Text style={{ color: theme.text, fontSize: 12.5, fontWeight: '700' }}>
+                    {testResult.hijacked ? '⚠️ ' : testResult.answerIp ? '✅ ' : '❌ '}
+                    {testResult.verdict}
+                  </Text>
+                </View>
+                {testResult.entries.map((e, i) => (
+                  <View
+                    key={`${e.serverId}-${i}`}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 4,
+                    }}>
+                    <Text
+                      style={{
+                        color: e.group === 'UTAMA' ? theme.accent : theme.warn,
+                        fontSize: 10,
+                        fontWeight: '800',
+                        width: 62,
+                      }}>
+                      {e.group}
+                    </Text>
+                    <Text style={{ color: theme.text, fontSize: 12.5, fontWeight: '600', width: 110 }} numberOfLines={1}>
+                      {e.name}
+                    </Text>
+                    <Text style={{ color: theme.subtext, fontSize: 11.5, flex: 1 }} numberOfLines={2}>
+                      {e.ok
+                        ? e.ips.length
+                          ? `${e.ms} ms • ${e.ips.slice(0, 2).join(', ')}${e.ips.length > 2 ? ` +${e.ips.length - 2}` : ''}${e.suspicious ? ' • ⚠️ IP privat/tercadang' : ''}`
+                          : `${e.ms} ms • tanpa jawaban`
+                        : e.note ?? e.error ?? 'gagal'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        {/* --- DNS Privat + catatan jujur --- */}
+        {(() => {
+          const dot = [...dns.nameservers, ...dns.fallbacks].map(dnsServerById).find((d) => d?.type === 'DoT');
+          return (
+            <Row
+              theme={theme}
+              icon="lock"
+              title="Buka Pengaturan DNS Privat (DoT)"
+              subtitle={dot ? `Isi hostname: ${dot.endpoint}` : 'Aktifkan DoT Android untuk semua koneksi'}
+              onPress={() => openPrivateDnsSettings()}
+            />
+          );
+        })()}
+        <Row
+          theme={theme}
+          icon="info"
+          title="GEOIP & fallback-filter"
+          subtitle="Padanan Clash: jawaban IP privat/tercadang (daftar ipcidr) → cadangan dipakai; domain google/facebook/dll. selalu dibandingkan"
+        />
+        <Row
+          theme={theme}
+          icon="warning"
+          title="Catatan jujur"
+          subtitle="Server di atas dipakai untuk uji resolusi & panduan DoT. Menerapkan DNS ke SEMUA koneksi lewat DNS Privat Android. Blokir DPI/SNI tak bisa dilewati browser mana pun tanpa VPN."
+          last
+        />
+      </ListSection>
+
       {/* ---------------- Data ---------------- */}
       <ListSection title="Data & privasi" theme={theme}>
         <Row
@@ -377,6 +584,57 @@ export function SettingsScreen() {
             keyboardType="url"
           />
           <Button label="Simpan" theme={theme} onPress={saveEngine} />
+        </View>
+      </Sheet>
+
+      {/* ---------------- lembar: pilih server DNS ---------------- */}
+      <Sheet
+        visible={!!picker}
+        onClose={() => setPicker(null)}
+        title={picker ? `Server ${picker.group === 'ns' ? 'utama' : 'cadangan'} #${picker.slot + 1}` : undefined}
+        theme={theme}>
+        <View style={{ padding: spacing.md }}>
+          {DNS_SERVERS.map((d) => {
+            const active =
+              picker && (picker.group === 'ns' ? dns.nameservers : dns.fallbacks)[picker.slot] === d.id;
+            return (
+              <Pressable
+                key={d.id}
+                onPress={() => pickServer(d.id)}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: active ? theme.accentSoft : pressed ? theme.surface2 : theme.surface,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: active ? theme.accent : theme.border,
+                  paddingHorizontal: 12,
+                  paddingVertical: 9,
+                  marginBottom: 6,
+                })}>
+                <View
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 9,
+                    backgroundColor: (d.type === 'DoH' ? theme.accent : theme.warn) + '26',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 10,
+                  }}>
+                  <Icon name={d.type === 'DoH' ? 'globe' : 'lock'} size={16} color={d.type === 'DoH' ? theme.accent : theme.warn} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.text, fontSize: 14, fontWeight: '700' }}>{d.name}</Text>
+                  <Text style={{ color: theme.subtext, fontSize: 11.5 }}>
+                    {d.type} • {d.ip ?? d.endpoint.replace(/^https?:\/\//, '')} : {d.port}
+                    {d.note ? ` — ${d.note}` : ''}
+                  </Text>
+                </View>
+                {active ? <Icon name="check" size={17} color={theme.accent} /> : null}
+              </Pressable>
+            );
+          })}
         </View>
       </Sheet>
 

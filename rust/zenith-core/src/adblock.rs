@@ -4,11 +4,25 @@
 
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::sync::Mutex;
 use url::Url;
 
 /// Daftar blokir bawaan (kurasi ringan, aman) — digabung saat startup.
 const DEFAULT_HOSTS: &str = include_str!("default_blocklist.txt");
+
+/// Batas ukuran log koneksi (Shield Guard) — entri terbaru dipertahankan.
+const LOG_CAP: usize = 500;
+
+/// Satu entri log koneksi (hostname + keputusan blokir).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnLogEntry {
+    pub host: String,
+    pub blocked: bool,
+    pub main: bool,
+    pub at: u64,
+}
 
 #[derive(Debug)]
 pub struct Engine {
@@ -17,6 +31,7 @@ pub struct Engine {
     allowed: HashSet<String>,
     pub blocked_count: u64,
     pub user_list_lines: usize,
+    conn_log: VecDeque<ConnLogEntry>,
 }
 
 impl Engine {
@@ -27,6 +42,7 @@ impl Engine {
             allowed: HashSet::new(),
             blocked_count: 0,
             user_list_lines: 0,
+            conn_log: VecDeque::new(),
         };
         e.load_default();
         e
@@ -111,17 +127,52 @@ impl Engine {
     }
 
     pub fn should_block(&mut self, url_str: &str) -> bool {
-        if !self.enabled {
-            return false;
-        }
-        let Ok(url) = Url::parse(url_str) else { return false };
-        let Some(host) = url.host_str() else { return false };
-        let host = host.to_ascii_lowercase();
-        if self.should_block_host(&host) {
-            self.blocked_count += 1;
-            return true;
+        if let Ok(url) = Url::parse(url_str) {
+            if let Some(host) = url.host_str() {
+                let host = host.to_ascii_lowercase();
+                let blocked = self.enabled && self.should_block_host(&host);
+                if blocked {
+                    self.blocked_count += 1;
+                }
+                self.log_conn(&host, blocked, false);
+                return blocked;
+            }
         }
         false
+    }
+
+    /// Catat permintaan frame utama (halaman itu sendiri) — hanya untuk log.
+    pub fn note_request(&mut self, url_str: &str) {
+        if let Ok(url) = Url::parse(url_str) {
+            if let Some(host) = url.host_str() {
+                let host = host.to_ascii_lowercase();
+                self.log_conn(&host, false, true);
+            }
+        }
+    }
+
+    fn log_conn(&mut self, host: &str, blocked: bool, main: bool) {
+        if host.is_empty() {
+            return;
+        }
+        if self.conn_log.len() >= LOG_CAP {
+            self.conn_log.pop_front();
+        }
+        self.conn_log.push_back(ConnLogEntry {
+            host: host.to_string(),
+            blocked,
+            main,
+            at: now_ms(),
+        });
+    }
+
+    /// Log koneksi terbaru lebih dulu.
+    pub fn connection_log(&self) -> Vec<ConnLogEntry> {
+        self.conn_log.iter().rev().cloned().collect()
+    }
+
+    pub fn clear_connection_log(&mut self) {
+        self.conn_log.clear();
     }
 
     pub fn stats(&self) -> EngineStats {
@@ -181,6 +232,13 @@ pub static ENGINE: Lazy<Mutex<Engine>> = Lazy::new(|| Mutex::new(Engine::new()))
 pub fn with_engine<T>(f: impl FnOnce(&mut Engine) -> T) -> T {
     let mut e = ENGINE.lock().unwrap_or_else(|p| p.into_inner());
     f(&mut e)
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

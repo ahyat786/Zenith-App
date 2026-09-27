@@ -1,4 +1,5 @@
 import type { SearchEngine, Settings } from '../types';
+import { DEFAULT_DNS_SETTINGS } from '../core/dns';
 
 export const DEFAULT_ENGINES: SearchEngine[] = [
   {
@@ -51,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fastDownloads: true,
   customCss: '',
   homepage: '',
+  dns: DEFAULT_DNS_SETTINGS,
 };
 
 export const DEFAULT_WORKSPACES = [

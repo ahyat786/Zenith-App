@@ -181,6 +181,36 @@ pub extern "system" fn Java_com_zenith_browser_core_ZenithCoreJNI_adblockResetSt
     adblock::with_engine(|e| e.blocked_count = 0);
 }
 
+/// Log koneksi Shield Guard — hostname + keputusan blokir (terbaru dulu).
+#[no_mangle]
+pub extern "system" fn Java_com_zenith_browser_core_ZenithCoreJNI_adblockConnectionLog<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+) -> JString<'local> {
+    let log = adblock::with_engine(|e| e.connection_log());
+    let out = json!({ "ok": true, "log": log }).to_string();
+    ret(&mut env, out)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_zenith_browser_core_ZenithCoreJNI_adblockClearConnectionLog(
+    _env: JNIEnv,
+    _class: JClass,
+) {
+    adblock::with_engine(|e| e.clear_connection_log());
+}
+
+/// Catat navigasi frame utama ke log koneksi (tanpa keputusan blokir).
+#[no_mangle]
+pub extern "system" fn Java_com_zenith_browser_core_ZenithCoreJNI_adblockNoteRequest<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    url: JString<'local>,
+) {
+    let url_s = to_rust(&mut env, &url);
+    adblock::with_engine(|e| e.note_request(&url_s));
+}
+
 // --------------------------------------------------------------- URL kit
 
 #[no_mangle]

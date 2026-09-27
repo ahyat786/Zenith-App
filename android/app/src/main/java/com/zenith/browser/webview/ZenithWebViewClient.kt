@@ -20,9 +20,12 @@ class ZenithWebViewClient : RNCWebViewClient() {
         view: WebView,
         request: WebResourceRequest
     ): WebResourceResponse? {
-        if (!request.isForMainFrame && ZenithCoreJNI.available) {
+        if (ZenithCoreJNI.available) {
             try {
-                if (ZenithCoreJNI.adblockShouldBlock(request.url.toString())) {
+                if (request.isForMainFrame) {
+                    // Catat halaman utama ke log koneksi Shield Guard.
+                    ZenithCoreJNI.adblockNoteRequest(request.url.toString())
+                } else if (ZenithCoreJNI.adblockShouldBlock(request.url.toString())) {
                     return blockedResponse()
                 }
             } catch (_: Throwable) {

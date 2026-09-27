@@ -30,6 +30,10 @@ interface ZenithCoreNative {
   adblockAllowHost(host: string, allow: boolean): Promise<void>;
   adblockStats(): Promise<string | null>;
   adblockResetStats(): Promise<void>;
+  adblockConnectionLog(): Promise<string | null>;
+  adblockClearConnectionLog(): Promise<void>;
+  adblockNoteRequest(url: string): Promise<void>;
+  dohResolve(url: string, name: string, timeoutMs: number): Promise<string | null>;
   normalizeInput(input: string, searchTemplate: string): Promise<string | null>;
   expandSearch(template: string, query: string): Promise<string | null>;
   hostOf(url: string): Promise<string | null>;
@@ -208,6 +212,58 @@ export async function adblockResetStats(): Promise<void> {
     await ZC?.adblockResetStats();
   } catch {
     // diabaikan
+  }
+}
+
+/** Entri log koneksi Shield Guard (hostname + keputusan blokir). */
+export interface ConnLogEntry {
+  host: string;
+  blocked: boolean;
+  main: boolean;
+  at: number;
+}
+
+export async function adblockConnectionLog(): Promise<ConnLogEntry[]> {
+  if (!ZC) {
+    return [];
+  }
+  try {
+    const raw = await ZC.adblockConnectionLog();
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.log) ? parsed.log : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function adblockClearConnectionLog(): Promise<void> {
+  try {
+    await ZC?.adblockClearConnectionLog();
+  } catch {
+    // diabaikan
+  }
+}
+
+/** Hasil satu kueri DoH dari Rust (wireformat RFC 8484). */
+export interface DohResult {
+  ok: boolean;
+  ips?: string[];
+  ms?: number;
+  error?: string;
+}
+
+export async function dohResolve(url: string, name: string, timeoutMs = 4000): Promise<DohResult | null> {
+  if (!ZC) {
+    return null;
+  }
+  try {
+    const raw = await ZC.dohResolve(url, name, timeoutMs);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
   }
 }
 

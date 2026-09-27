@@ -41,6 +41,8 @@ export function TabView({ tab, active, theme }: Props) {
   const siteCfg = siteConfigFor(tab.url);
   /** Mode desktop per-situs: UA macOS + viewport 1280 + scalesPageToFit. */
   const desktop = isDesktopUa(siteCfg?.userAgent);
+  /** Shield Guard aktif untuk situs ini? */
+  const shieldOn = state.settings.adblockEnabled && siteCfg?.adblockEnabled !== false;
 
   const setRef = useCallback(
     (ref: any) => {
@@ -73,7 +75,12 @@ export function TabView({ tab, active, theme }: Props) {
       }
       const phasePayload =
         phase === 'start' ? plan.start : phase === 'end' ? plan.end : plan.idle;
-      const payload = joinPayload([phasePayload, plan.css]);
+      // Shield Guard: lapisan kosmetik ringkas (kelas iklan generik + aturan
+      // halaman uji d3host) — dikombinasikan dengan blokir jaringan Rust.
+      const cosmetic = shieldOn
+        ? '(function(){try{var s=document.createElement("style");s.textContent=".textads,.adbox.banner_ads.adsbox,.adsbox.banner_ads{display:none!important;}";(document.head||document.documentElement).appendChild(s);}catch(e){}})();'
+        : '';
+      const payload = joinPayload([phasePayload, plan.css, cosmetic]);
       if (payload) {
         try {
           wv.injectJavaScript(payload);
@@ -82,7 +89,7 @@ export function TabView({ tab, active, theme }: Props) {
         }
       }
     },
-    [tab.id, state.scripts, state.extensions, state.settings.customCss, siteConfigFor],
+    [tab.id, state.scripts, state.extensions, state.settings.customCss, siteConfigFor, shieldOn],
   );
 
   // ---------------- pesan dari jembatan ----------------

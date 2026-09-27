@@ -132,6 +132,7 @@ function reducer(state: AppState, action: Action): AppState {
           p.settings?.engines && p.settings.engines.length > 0
             ? p.settings.engines
             : DEFAULT_ENGINES,
+        dns: { ...DEFAULT_SETTINGS.dns, ...(p.settings?.dns ?? {}) },
       };
       // Rekonsiliasi: tab aktif harus valid; kalau tidak, pakai tab pertama.
       // (bug v0.2: activeTabId basi → semua tombol bar bawah disabled)

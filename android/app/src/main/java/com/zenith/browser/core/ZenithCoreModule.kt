@@ -75,6 +75,28 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
         guard(promise, Unit) { ZenithCoreJNI.adblockResetStats() }
 
     @ReactMethod
+    fun adblockConnectionLog(promise: Promise) =
+        guard(promise, null as String?) { ZenithCoreJNI.adblockConnectionLog() }
+
+    @ReactMethod
+    fun adblockClearConnectionLog(promise: Promise) =
+        guard(promise, Unit) { ZenithCoreJNI.adblockClearConnectionLog() }
+
+    @ReactMethod
+    fun adblockNoteRequest(url: String, promise: Promise) =
+        guard(promise, Unit) { ZenithCoreJNI.adblockNoteRequest(url) }
+
+    @ReactMethod
+    fun dohResolve(url: String, name: String, timeoutMs: Int, promise: Promise) {
+        // Murni OkHttp (HTTP/2) — tidak bergantung libzenith_core.so.
+        try {
+            promise.resolve(ZenithDoh.resolve(url, name, timeoutMs))
+        } catch (t: Throwable) {
+            promise.reject("ZENITH_DOH", t.message ?: t.toString(), t)
+        }
+    }
+
+    @ReactMethod
     fun normalizeInput(input: String, searchTemplate: String, promise: Promise) =
         guard(promise, null as String?) { ZenithCoreJNI.normalizeInput(input, searchTemplate) }
 

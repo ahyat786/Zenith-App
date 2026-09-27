@@ -30,7 +30,13 @@ import { GlanceView } from './GlanceView';
 import { getWebView } from './refs';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, IconButton, Row, Sheet, ToggleRow, type SheetAction } from '../ui/kit';
-import { adblockStats, type AdblockStats } from '../core/native';
+import {
+  adblockClearConnectionLog,
+  adblockConnectionLog,
+  adblockStats,
+  type AdblockStats,
+  type ConnLogEntry,
+} from '../core/native';
 import { DESKTOP_UA, isDesktopUa } from '../core/desktop';
 import { subscribeDownloads, type DownloadJob } from '../core/downloads';
 import type { Tab } from '../types';
@@ -43,6 +49,7 @@ export function BrowserScreen() {
   const [shieldsOpen, setShieldsOpen] = useState(false);
   const [stats, setStats] = useState<AdblockStats | null>(null);
   const [download, setDownload] = useState<DownloadJob | null>(null);
+  const [connLog, setConnLog] = useState<ConnLogEntry[]>([]);
 
   const wsTabs = tabsInWorkspace(state.activeWorkspaceId);
   const splitIds = state.splitTabIds;
@@ -95,6 +102,19 @@ export function BrowserScreen() {
     const t = setInterval(refreshStats, 1000);
     return () => clearInterval(t);
   }, [refreshStats, activeTab?.url]);
+
+  // ---------- log koneksi Shield Guard (hostname) ----------
+  const refreshConnLog = useCallback(async () => {
+    setConnLog(await adblockConnectionLog());
+  }, []);
+  useEffect(() => {
+    if (!shieldsOpen) {
+      return;
+    }
+    refreshConnLog();
+    const t = setInterval(refreshConnLog, 1500);
+    return () => clearInterval(t);
+  }, [shieldsOpen, refreshConnLog, activeTab?.url]);
 
   // ---------- banner unduhan (Via) ----------
   useEffect(() => {
@@ -513,9 +533,9 @@ export function BrowserScreen() {
   const empty = state.tabs.length === 0;
   const wsEmptyButTabsExist = !empty && wsTabs.length === 0;
 
-  // ---------- panel SHIELDS (Brave) ----------
+  // ---------- panel SHIELD GUARD (Brave + log koneksi) ----------
   const shieldsSheet = (
-    <Sheet visible={shieldsOpen} onClose={() => setShieldsOpen(false)} title={`Shields — ${host || 'tak ada situs'}`} theme={theme}>
+    <Sheet visible={shieldsOpen} onClose={() => setShieldsOpen(false)} title={`Shield Guard — ${host || 'tak ada situs'}`} theme={theme}>
       <View style={{ paddingHorizontal: spacing.lg, paddingTop: 6 }}>
         <View
           style={{
@@ -536,6 +556,83 @@ export function BrowserScreen() {
             </Text>
           </View>
         </View>
+      </View>
+
+      {/* ---------- LOG KONEKSI (hostname) ---------- */}
+      <View style={{ paddingHorizontal: spacing.lg, paddingBottom: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+          <Icon name="zap" size={14} color={theme.subtext} />
+          <Text
+            style={{
+              color: theme.subtext,
+              fontSize: 12,
+              fontWeight: '700',
+              textTransform: 'uppercase',
+              letterSpacing: 0.6,
+              marginLeft: 6,
+              flex: 1,
+            }}>
+            Connection log — {connLog.length ? `${connLog.length} terakhir` : 'menunggu permintaan'}
+          </Text>
+          {connLog.length > 0 ? (
+            <Pressable
+              onPress={async () => {
+                await adblockClearConnectionLog();
+                setConnLog([]);
+              }}
+              hitSlop={8}
+              style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: theme.surface2 }}>
+              <Text style={{ color: theme.subtext, fontSize: 11.5, fontWeight: '700' }}>Bersihkan</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {connLog.length === 0 ? (
+          <Text style={{ color: theme.subtext, fontSize: 12.5, paddingBottom: 6 }}>
+            Buka halaman apa pun — hostname setiap permintaan muncul di sini lengkap dengan statusnya.
+          </Text>
+        ) : (
+          <View
+            style={{
+              backgroundColor: theme.surface,
+              borderRadius: radius.md,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: theme.border,
+              paddingVertical: 4,
+              marginBottom: 4,
+            }}>
+            {connLog.slice(0, 12).map((e, i) => (
+              <View
+                key={`${e.at}-${e.host}-${i}`}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                }}>
+                <View
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    marginRight: 8,
+                    backgroundColor: e.blocked ? theme.danger : e.main ? theme.accent : theme.ok,
+                  }}
+                />
+                <Text numberOfLines={1} style={{ color: theme.text, fontSize: 12.5, fontWeight: '600', flex: 1 }}>
+                  {e.host}
+                </Text>
+                <Text style={{ color: theme.subtext, fontSize: 11, marginLeft: 8 }}>
+                  {e.main ? 'halaman' : e.blocked ? '⛔ diblokir' : 'lolos'}
+                </Text>
+              </View>
+            ))}
+            {connLog.length > 12 ? (
+              <Text style={{ color: theme.subtext, fontSize: 11, textAlign: 'center', paddingVertical: 4 }}>
+                +{connLog.length - 12} lainnya
+              </Text>
+            ) : null}
+          </View>
+        )}
       </View>
       <ToggleRow
         theme={theme}
@@ -574,6 +671,16 @@ export function BrowserScreen() {
         subtitle={isDesktopMode ? 'UA desktop aktif — matikan untuk mobile' : 'Tampilkan situs versi desktop'}
         value={isDesktopMode}
         onValueChange={() => toggleDesktopMode()}
+      />
+      <Row
+        theme={theme}
+        icon="globe"
+        title="Jaringan & DNS Aman"
+        subtitle="Kelompok server utama/cadangan + uji resolusi"
+        onPress={() => {
+          setShieldsOpen(false);
+          dispatch({ type: 'SET_SCREEN', screen: 'settings' });
+        }}
       />
       <Row
         theme={theme}

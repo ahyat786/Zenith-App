@@ -38,6 +38,10 @@ object ZenithCoreJNI {
     @JvmStatic external fun adblockShouldBlock(url: String): Boolean
     @JvmStatic external fun adblockStats(): String
     @JvmStatic external fun adblockResetStats()
+    @JvmStatic external fun adblockConnectionLog(): String
+    @JvmStatic external fun adblockClearConnectionLog()
+    @JvmStatic external fun adblockNoteRequest(url: String)
+
 
     // URL kit
     @JvmStatic external fun normalizeInput(input: String, searchTemplate: String): String

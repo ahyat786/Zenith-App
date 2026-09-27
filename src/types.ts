@@ -121,6 +121,7 @@ export interface Settings {
   fastDownloads: boolean; // ala Via: unduhan multi-thread
   customCss: string; // CSS global (userstyle ala Via)
   homepage: string; // '' = overlay awal
+  dns: import('./core/dns').DnsSettings; // Shield Guard: kelompok DNS utama/cadangan
 }
 
 export interface HistoryItem {
