@@ -33,6 +33,7 @@ interface ZenithCoreNative {
   adblockConnectionLog(): Promise<string | null>;
   adblockClearConnectionLog(): Promise<void>;
   adblockNoteRequest(url: string): Promise<void>;
+  adblockShouldBlock(url: string): Promise<boolean>;
   dohResolve(url: string, name: string, timeoutMs: number): Promise<string | null>;
   normalizeInput(input: string, searchTemplate: string): Promise<string | null>;
   expandSearch(template: string, query: string): Promise<string | null>;
@@ -244,6 +245,18 @@ export async function adblockClearConnectionLog(): Promise<void> {
     await ZC?.adblockClearConnectionLog();
   } catch {
     // diabaikan
+  }
+}
+
+/** Catat hostname ke log koneksi Shield Guard dan kembalikan keputusan blokir. */
+export async function adblockShouldBlock(url: string): Promise<boolean> {
+  if (!ZC) {
+    return false;
+  }
+  try {
+    return !!(await ZC.adblockShouldBlock(url));
+  } catch {
+    return false;
   }
 }
 

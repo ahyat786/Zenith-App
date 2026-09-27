@@ -28,7 +28,7 @@ export interface DnsServerDef {
 }
 
 export interface DnsSettings {
-  preset: 'id' | 'global' | 'custom';
+  preset: 'id' | 'global' | 'adguard' | 'custom';
   nameservers: string[]; // 2 id server utama
   fallbacks: string[]; // 2 id server cadangan
 }
@@ -54,11 +54,20 @@ export function dnsServerById(id: string): DnsServerDef | undefined {
 }
 
 /** Preset default — Indonesia & Global (keduanya tersedia). */
-export const DNS_PRESETS: Record<'id' | 'global', { nameservers: string[]; fallbacks: string[] }> = {
-  // Indonesia: utama BebasDNS (anti internet positif) + Quad9; cadangan AdGuard + Cloudflare
-  id: { nameservers: ['bebasdns-doh', 'quad9-doh'], fallbacks: ['adguard-doh', 'cloudflare-doh'] },
-  // Global: persis tabel pengguna — NS: Quad9 DoH + 9.9.9.9:853; FB: Quad9 DoH + 149.112.112.112:853
+export const DNS_PRESETS: Record<'id' | 'global' | 'adguard', { nameservers: string[]; fallbacks: string[] }> = {
+  // Indonesia: utama BebasDNS + Quad9; cadangan AdGuard DoH + AdGuard DoT
+  id: { nameservers: ['bebasdns-doh', 'quad9-doh'], fallbacks: ['adguard-doh', 'adguard-dot'] },
+  // Global / Quad9 — 2 NameServer + 2 FallBack, persis tabel rilis
+  // NameServer dns.quad9.net/dns-query HTTPS
+  // NameServer 9.9.9.9:853 TLS
+  // FallBack  dns.quad9.net/dns-query HTTPS
+  // FallBack  149.112.112.112:853 TLS
   global: { nameservers: ['quad9-doh', 'quad9-dot'], fallbacks: ['quad9-doh', 'quad9-dot2'] },
+  // AdGuard, selain Quad9 — juga 2+2
+  adguard: {
+    nameservers: ['adguard-doh', 'adguard-dot'],
+    fallbacks: ['adguard-family-doh', 'adguard-family-dot'],
+  },
 };
 
 export const DEFAULT_DNS_SETTINGS: DnsSettings = {
@@ -127,6 +136,26 @@ export function isPrivateIp(ip: string): boolean {
 }
 
 /** Padanan `fallback-filter.domain` Clash — domain yang jawabannya selalu dibandingkan utama vs cadangan. */
+/**
+ * Padanan Clash `fallback-filter`.
+ * `+.*` membuat setiap hostname masuk perbandingan utama/cadangan
+ * dan tetap tercatat di log koneksi Shield Guard.
+ *
+ * fallback-filter:
+ *   geoip: true
+ *   geoip-code: ID
+ *   domain:
+ *     +.google.com
+ *     +.facebook.com
+ *     +.youtube.com
+ *     +.githubusercontent.com
+ *     +.googlevideo.com
+ *     +.msftconnecttest.com
+ *     +.msftncsi.com
+ *     msftconnecttest.com
+ *     msftncsi.com
+ *     +.*
+ */
 export const FALLBACK_FILTER_DOMAINS = [
   '+.google.com',
   '+.facebook.com',
@@ -137,11 +166,21 @@ export const FALLBACK_FILTER_DOMAINS = [
   '+.msftncsi.com',
   'msftconnecttest.com',
   'msftncsi.com',
+  '+.*',
 ];
+
+export const FALLBACK_FILTER_GEOIP = true;
+export const FALLBACK_FILTER_GEOIP_CODE = 'ID';
 
 export function inFallbackFilterDomain(host: string): boolean {
   const h = host.toLowerCase().replace(/^\.+/, '');
+  if (!h) {
+    return false;
+  }
   return FALLBACK_FILTER_DOMAINS.some((d) => {
+    if (d === '+.*' || d === '*') {
+      return true;
+    }
     const bare = d.replace(/^\+\./, '');
     return h === bare || h.endsWith('.' + bare);
   });

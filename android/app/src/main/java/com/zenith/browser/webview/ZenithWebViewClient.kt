@@ -5,7 +5,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import com.reactnativecommunity.webview.RNCWebViewClient
 import com.zenith.browser.core.ZenithCoreJNI
-import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
 
 /**
  * WebViewClient Zenith — memblokir permintaan sub-sumber daya (iklan/pelacak)
@@ -35,13 +36,21 @@ class ZenithWebViewClient : RNCWebViewClient() {
         return super.shouldInterceptRequest(view, request)
     }
 
+    /**
+     * Jawaban kosong membuat `fetch` di halaman uji tetap "berhasil".
+     * Stream yang melempar membuat pemuatan gagal (setara ditolak jaringan),
+     * sehingga tes host, gambar iklan, dan skrip umpan terhitung terblokir.
+     */
     private fun blockedResponse(): WebResourceResponse =
         WebResourceResponse(
             "text/plain",
             "utf-8",
-            204,
-            "No Content",
+            403,
+            "Blocked",
             mapOf("X-Zenith-Blocked" to "1"),
-            ByteArrayInputStream(ByteArray(0))
+            object : InputStream() {
+                override fun read(): Int = throw IOException("blocked")
+                override fun read(b: ByteArray, off: Int, len: Int): Int = throw IOException("blocked")
+            }
         )
 }

@@ -87,6 +87,10 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
         guard(promise, Unit) { ZenithCoreJNI.adblockNoteRequest(url) }
 
     @ReactMethod
+    fun adblockShouldBlock(url: String, promise: Promise) =
+        guard(promise, false) { ZenithCoreJNI.adblockShouldBlock(url) }
+
+    @ReactMethod
     fun dohResolve(url: String, name: String, timeoutMs: Int, promise: Promise) {
         // Murni OkHttp (HTTP/2) — tidak bergantung libzenith_core.so.
         try {

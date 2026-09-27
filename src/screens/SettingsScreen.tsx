@@ -53,7 +53,7 @@ export function SettingsScreen() {
   const setDns = (patch: Partial<typeof dns>) =>
     dispatch({ type: 'SET_SETTINGS', patch: { dns: { ...dns, ...patch } } });
 
-  const applyPreset = (preset: 'id' | 'global') =>
+  const applyPreset = (preset: 'id' | 'global' | 'adguard') =>
     setDns({ preset, nameservers: [...DNS_PRESETS[preset].nameservers], fallbacks: [...DNS_PRESETS[preset].fallbacks] });
 
   const pickServer = (id: string) => {
@@ -328,13 +328,14 @@ export function SettingsScreen() {
             theme={theme}
             value={dns.preset === 'custom' ? 'custom' : dns.preset}
             onValueChange={(v) => {
-              if (v === 'id' || v === 'global') {
+              if (v === 'id' || v === 'global' || v === 'adguard') {
                 applyPreset(v);
               }
             }}
             options={[
-              { value: 'id', label: '🇮🇩 Indonesia' },
-              { value: 'global', label: '🌍 Global' },
+              { value: 'id', label: 'ID' },
+              { value: 'global', label: 'Quad9' },
+              { value: 'adguard', label: 'AdGuard' },
               { value: 'custom', label: 'Kustom' },
             ]}
           />
@@ -497,8 +498,8 @@ export function SettingsScreen() {
         <Row
           theme={theme}
           icon="info"
-          title="GEOIP & fallback-filter"
-          subtitle="Padanan Clash: jawaban IP privat/tercadang (daftar ipcidr) → cadangan dipakai; domain google/facebook/dll. selalu dibandingkan"
+          title="GEOIP & GEOSite"
+          subtitle="geoip: true · geoip-code: ID · domain +.google.com +.facebook.com +.youtube.com +.googlevideo.com +.* — setiap hostname dibandingkan dan masuk log koneksi"
         />
         <Row
           theme={theme}

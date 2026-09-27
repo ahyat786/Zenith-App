@@ -20,6 +20,8 @@ import type { Tab } from '../types';
 import type { Theme } from '../theme';
 import { useStore } from '../state/store';
 import { BRIDGE_SCRIPT, joinPayload } from '../core/inject';
+import { shieldBootScript } from '../core/shield';
+import { adblockShouldBlock } from '../core/native';
 import { DESKTOP_INJECT_SCRIPT, DESKTOP_UA, isDesktopUa } from '../core/desktop';
 import { planCached } from '../core/plan';
 import { webviewRefs } from './refs';
@@ -141,6 +143,11 @@ export function TabView({ tab, active, theme }: Props) {
             patch: { linkMenu: { url: String(msg.url || ''), text: String(msg.text || '') } },
           });
           break;
+        case 'zen:shield':
+          if (shieldOn && msg.url) {
+            adblockShouldBlock(String(msg.url)).catch(() => {});
+          }
+          break;
         case 'zen:error':
           console.warn(`[Zenith] ${msg.script}: ${msg.message}`);
           break;
@@ -148,7 +155,7 @@ export function TabView({ tab, active, theme }: Props) {
           break;
       }
     },
-    [tab.id, tab.url, initialUrl, injectPhase, dispatch],
+    [tab.id, tab.url, initialUrl, injectPhase, dispatch, shieldOn],
   );
 
   // ---------------- navigasi ----------------
@@ -250,7 +257,9 @@ export function TabView({ tab, active, theme }: Props) {
         source={{ uri: initialUrl }}
         style={{ flex: 1, backgroundColor: theme.bg }}
         originWhitelist={['*']}
-        injectedJavaScriptBeforeContentLoaded={BRIDGE_SCRIPT + '\n' + DESKTOP_INJECT_SCRIPT}
+        injectedJavaScriptBeforeContentLoaded={
+          BRIDGE_SCRIPT + '\n' + DESKTOP_INJECT_SCRIPT + (shieldOn ? '\n' + shieldBootScript() : '')
+        }
         onMessage={onMessage as any}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onNavigationStateChange={onNavigationStateChange}
@@ -296,7 +305,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent="Zenith/0.3.2"
+        applicationNameForUserAgent="Zenith/0.4.1"
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
