@@ -88,7 +88,20 @@ export function DownloadsScreen() {
   const back = () => dispatch({ type: 'SET_SCREEN', screen: 'browser' });
 
   const active = jobs.filter((j) => j.status === 'connecting' || j.status === 'downloading');
-  const failed = jobs.filter((j) => j.status === 'error' || j.status === 'canceled');
+  const failed = useMemo(() => {
+    const latest = new Map<string, DownloadJob>();
+    for (const job of jobs) {
+      if (job.status !== 'error' && job.status !== 'canceled') {
+        continue;
+      }
+      const key = job.url || job.filename;
+      const prev = latest.get(key);
+      if (!prev || (job.finishedAt || 0) >= (prev.finishedAt || 0)) {
+        latest.set(key, job);
+      }
+    }
+    return [...latest.values()];
+  }, [jobs]);
   const done = jobs.filter((j) => j.status === 'done');
   const grouped = useMemo(() => {
     const map = new Map<DownloadCategory, DownloadJob[]>();
@@ -206,8 +219,8 @@ export function DownloadsScreen() {
                   />
                 </View>
                 <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 5 }}>
-                  {job.status === 'connecting'
-                    ? 'Menghubungkan…'
+                  {job.done <= 0
+                    ? 'Menunggu data…'
                     : `${pct >= 0 ? pct + '% · ' : ''}${fmtBytes(job.done)}${job.total > 0 ? ' / ' + fmtBytes(job.total) : ''}${speed ? ' · ' + speed : ''}`}
                 </Text>
               </View>
@@ -244,7 +257,22 @@ export function DownloadsScreen() {
       ))}
 
       {failed.length > 0 ? (
-        <ListSection title={`Gagal (${failed.length})`} theme={theme}>
+        <ListSection
+          title={`Gagal (${failed.length})`}
+          theme={theme}
+          right={
+            <Pressable
+              onPress={() => {
+                for (const job of jobs) {
+                  if (job.status === 'error' || job.status === 'canceled') {
+                    removeDownload(job.id, false).catch(() => {});
+                  }
+                }
+                setTimeout(refresh, 200);
+              }}>
+              <Text style={{ color: theme.subtext, fontSize: 12, fontWeight: '700' }}>Bersihkan</Text>
+            </Pressable>
+          }>
           {failed.map((job) => (
             <Row
               key={job.id}

@@ -39,6 +39,8 @@ interface ZenithCoreNative {
   expandSearch(template: string, query: string): Promise<string | null>;
   hostOf(url: string): Promise<string | null>;
   openPrivateDnsSettings(): Promise<boolean>;
+  privateProfileSupported(): Promise<boolean>;
+  clearPrivateSession(): Promise<boolean>;
 }
 
 const ZC = NativeModules.ZenithCore as ZenithCoreNative | undefined;
@@ -327,6 +329,22 @@ export async function openPrivateDnsSettings(): Promise<boolean> {
     return (await ZC?.openPrivateDnsSettings()) ?? false;
   } catch {
     return false;
+  }
+}
+
+export async function privateProfileSupported(): Promise<boolean> {
+  try {
+    return (await ZC?.privateProfileSupported()) ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export async function clearPrivateSession(): Promise<void> {
+  try {
+    await ZC?.clearPrivateSession();
+  } catch {
+    // profil privat mungkin tidak ada
   }
 }
 

@@ -118,39 +118,40 @@ export function ExtensionsScreen() {
     }
   };
 
+  const installExample = async (ex: (typeof EXAMPLE_EXTENSIONS)[number]) => {
+    const parsed = await parseExtensionManifest(ex.manifest);
+    if (!parsed.ok || !parsed.extension) {
+      Alert.alert('Gagal', parsed.error ?? 'manifest contoh tidak valid');
+      return;
+    }
+    const ext = parsed.extension;
+    dispatch({
+      type: 'ADD_EXTENSION',
+      extension: {
+        id: ext.id,
+        name: ext.name,
+        version: ext.version,
+        description: ext.description,
+        manifestVersion: ext.manifestVersion,
+        permissions: ext.permissions ?? [],
+        hostPermissions: ext.hostPermissions ?? [],
+        contentScripts: ext.contentScripts ?? [],
+        enabled: true,
+        hasBackground: !!ext.hasBackground,
+        iconLetter: (ext.name || '?').charAt(0).toUpperCase(),
+        files: ex.files,
+        importedAt: Date.now(),
+      },
+    });
+    Alert.alert('Ekstensi contoh dipasang', `${ex.title} aktif di semua situs http/https.`);
+  };
+
   const addActions: SheetAction[] = [
     { label: 'Impor ZIP dari URL', icon: 'download', onPress: () => setImportOpen(true) },
     ...EXAMPLE_EXTENSIONS.map((ex): SheetAction => ({
       label: `Contoh: ${ex.title}`,
       icon: 'zap',
-      onPress: async () => {
-        // contoh bawaan: langsung rakit tanpa ZIP
-        const parsed = await parseExtensionManifest(ex.manifest);
-        if (!parsed.ok || !parsed.extension) {
-          Alert.alert('Gagal', parsed.error ?? 'manifest contoh tidak valid');
-          return;
-        }
-        const ext = parsed.extension;
-        dispatch({
-          type: 'ADD_EXTENSION',
-          extension: {
-            id: ext.id,
-            name: ext.name,
-            version: ext.version,
-            description: ext.description,
-            manifestVersion: ext.manifestVersion,
-            permissions: ext.permissions ?? [],
-            hostPermissions: ext.hostPermissions ?? [],
-            contentScripts: ext.contentScripts ?? [],
-            enabled: true,
-            hasBackground: !!ext.hasBackground,
-            iconLetter: (ext.name || '?').charAt(0).toUpperCase(),
-            files: ex.files,
-            importedAt: Date.now(),
-          },
-        });
-        Alert.alert('Ekstensi contoh dipasang', `${ex.title} aktif di semua situs http/https.`);
-      },
+      onPress: () => installExample(ex),
     })),
   ];
 
@@ -161,12 +162,18 @@ export function ExtensionsScreen() {
       onBack={back}
       theme={theme}>
       {state.extensions.length === 0 ? (
-        <EmptyState
-          theme={theme}
-          icon="puzzle"
-          title="Belum ada ekstensi"
-          subtitle="Impor ekstensi Chrome (.zip dengan manifest.json) — content scripts dijalankan otomatis."
-        />
+        <View style={{ padding: spacing.lg, gap: 10 }}>
+          <EmptyState
+            theme={theme}
+            icon="puzzle"
+            title="Belum ada ekstensi"
+            subtitle="Pasang contoh bawaan, atau impor ZIP Chrome yang berisi manifest.json. Hanya content scripts yang dijalankan."
+          />
+          {EXAMPLE_EXTENSIONS.map((ex) => (
+            <Button key={ex.title} label={`Pasang ${ex.title}`} theme={theme} onPress={() => installExample(ex)} />
+          ))}
+          <Button label="Impor ZIP dari URL" kind="secondary" theme={theme} onPress={() => setImportOpen(true)} />
+        </View>
       ) : null}
 
       {state.extensions.map((ext, i) => (
@@ -193,9 +200,11 @@ export function ExtensionsScreen() {
         />
       ))}
 
-      <View style={{ padding: spacing.lg, gap: 10 }}>
-        <Button label="＋ Pasang ekstensi" theme={theme} onPress={() => setAddOpen(true)} />
-      </View>
+      {state.extensions.length > 0 ? (
+        <View style={{ padding: spacing.lg, gap: 10 }}>
+          <Button label="＋ Pasang ekstensi" theme={theme} onPress={() => setAddOpen(true)} />
+        </View>
+      ) : null}
 
       <ActionSheet
         visible={addOpen}

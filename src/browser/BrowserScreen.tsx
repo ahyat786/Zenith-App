@@ -6,7 +6,7 @@
  * + Brave (tombol shields dengan penghitung blokir + upgrade HTTPS).
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -37,6 +37,7 @@ import {
   adblockClearConnectionLog,
   adblockConnectionLog,
   adblockStats,
+  clearPrivateSession,
   type AdblockStats,
   type ConnLogEntry,
 } from '../core/native';
@@ -119,21 +120,35 @@ export function BrowserScreen() {
     return () => clearInterval(t);
   }, [shieldsOpen, refreshConnLog, activeTab?.url]);
 
-  // ---------- banner unduhan (Via) ----------
+  // ---------- banner unduhan ----------
+  // error/canceled tidak boleh menempel. X atau 0-byte yang macet disembunyikan.
+  const dismissedBanner = useRef<string | null>(null);
   useEffect(() => {
     const unsub = subscribeDownloads((job) => {
       if (job.status === 'downloading' || job.status === 'connecting') {
-        setDownload(job);
-      } else if (downloadRef.current?.id === job.id) {
-        setDownload(job.status === 'done' ? null : job);
+        if (dismissedBanner.current !== job.id) {
+          setDownload(job);
+        }
+        return;
+      }
+      if (downloadRef.current?.id === job.id) {
+        setDownload(null);
       }
     });
     return unsub;
   }, []);
-  const downloadRef = React.useRef<DownloadJob | null>(null);
+  const downloadRef = useRef<DownloadJob | null>(null);
   useEffect(() => {
     downloadRef.current = download;
   }, [download]);
+
+  const privateCount = state.tabs.filter((t) => t.incognito).length;
+  useEffect(() => {
+    if (!state.hydrated || privateCount > 0) {
+      return;
+    }
+    clearPrivateSession();
+  }, [privateCount, state.hydrated]);
 
   // ---------- tombol fisik kembali ----------
   useEffect(() => {
@@ -175,7 +190,12 @@ export function BrowserScreen() {
   // ---------- aksi ----------
   const openOmniboxNew = (incognito = false) =>
     dispatch({ type: 'SET_OMNIBOX', patch: { open: true, mode: 'new', initial: '', incognito } });
-  const openFreshTab = (incognito = false) => openNewTab(NEW_TAB_URL, { incognito });
+  const openFreshTab = (incognito = false) => {
+    openNewTab(NEW_TAB_URL, { incognito });
+    if (incognito) {
+      ToastAndroid.show('Mode privat — riwayat tidak disimpan', ToastAndroid.SHORT);
+    }
+  };
   const onNewTabPage = !activeTab || isNewTabUrl(activeTab.url);
   const openOmniboxEdit = () =>
     dispatch({
@@ -239,7 +259,7 @@ export function BrowserScreen() {
       return [];
     }
     return [
-      { label: 'Buka di tab baru', icon: 'plus', onPress: () => openNewTab(lm.url) },
+      { label: 'Buka di tab baru', icon: 'plus', onPress: () => openNewTab(lm.url, { incognito: !!activeTab?.incognito }) },
       { label: 'Buka di tab privat', icon: 'eyeOff', onPress: () => openNewTab(lm.url, { incognito: true }) },
       { label: 'Pratinjau cepat (Glance)', icon: 'eye', onPress: () => dispatch({ type: 'SET_UI', patch: { glanceUrl: lm.url } }) },
       { label: 'Bagikan tautan', icon: 'share', onPress: () => Share.share({ message: lm.url }).catch(() => {}) },
@@ -369,13 +389,27 @@ export function BrowserScreen() {
           paddingHorizontal: 13,
           height: 42,
           borderWidth: 1,
-          borderColor: isDesktopMode ? theme.accent : theme.border,
+          borderColor: activeTab?.incognito || isDesktopMode ? theme.accent : theme.border,
         })}>
-        {!onNewTabPage && activeTab?.url.startsWith('https://') ? (
+        {activeTab?.incognito ? (
+          <Icon name="eyeOff" size={14} color={theme.accent} />
+        ) : !onNewTabPage && activeTab?.url.startsWith('https://') ? (
           <Icon name="lock" size={13} color={theme.ok} />
         ) : (
           <Icon name="search" size={14} color={theme.subtext} />
         )}
+        {activeTab?.incognito ? (
+          <View
+            style={{
+              backgroundColor: theme.accentSoft,
+              borderRadius: 5,
+              paddingHorizontal: 5,
+              paddingVertical: 1,
+              marginLeft: 5,
+            }}>
+            <Text style={{ color: theme.accent, fontSize: 9, fontWeight: '800' }}>PRIVAT</Text>
+          </View>
+        ) : null}
         {isDesktopMode ? (
           <View
             style={{
@@ -456,7 +490,7 @@ export function BrowserScreen() {
         }}
       />
       <Pressable
-        onPress={() => openFreshTab()}
+        onPress={() => openFreshTab(!!activeTab?.incognito)}
         hitSlop={4}
         style={({ pressed }) => ({
           width: 46,
@@ -497,7 +531,16 @@ export function BrowserScreen() {
   );
 
   const bars = compact ? null : (
-    <View style={{ backgroundColor: theme.bar, zIndex: 20 }}>
+    <View style={{ backgroundColor: activeTab?.incognito ? theme.accentSoft : theme.bar, zIndex: 20 }}>
+      {activeTab?.incognito ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingBottom: 4 }}>
+          <Icon name="eyeOff" size={13} color={theme.accent} />
+          <Text style={{ color: theme.accent, fontSize: 11.5, fontWeight: '800', marginLeft: 6 }}>MODE PRIVAT</Text>
+          <Text style={{ color: theme.subtext, fontSize: 11.5, marginLeft: 8, flex: 1 }} numberOfLines={1}>
+            Tidak masuk riwayat
+          </Text>
+        </View>
+      ) : null}
       {workspaceBar}
       {addressRow}
       {progressBar}
@@ -711,13 +754,12 @@ export function BrowserScreen() {
           </>
         )}
 
-        {/* banner unduhan (Via) */}
-        {download ? (
-          <Pressable
-            onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'downloads' })}
+        {/* banner unduhan — bawah, bisa ditutup, tidak menempel saat gagal */}
+        {download && (download.status === 'downloading' || download.status === 'connecting') ? (
+          <View
             style={{
               position: 'absolute',
-              top: 6,
+              bottom: 8,
               left: 10,
               right: 10,
               backgroundColor: theme.surface,
@@ -730,33 +772,47 @@ export function BrowserScreen() {
               paddingVertical: 8,
               elevation: 8,
             }}>
-            <Icon name="download" size={18} color={theme.accent} />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text numberOfLines={1} style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
-                {download.status === 'connecting' ? 'Menghubungkan…' : download.filename}
-              </Text>
-              <View style={{ height: 4, backgroundColor: theme.surface2, borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
-                <View
-                  style={{
-                    height: 4,
-                    width:
-                      download.total > 0
-                        ? `${Math.min(100, Math.round((download.done / download.total) * 100))}%`
-                        : '30%',
-                    backgroundColor: theme.accent,
-                    borderRadius: 2,
-                  }}
-                />
+            <Pressable
+              onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'downloads' })}
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+              <Icon name="download" size={18} color={theme.accent} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text numberOfLines={1} style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
+                  {download.done === 0 ? 'Menghubungkan…' : download.filename}
+                </Text>
+                <View style={{ height: 4, backgroundColor: theme.surface2, borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                  <View
+                    style={{
+                      height: 4,
+                      width:
+                        download.total > 0
+                          ? `${Math.min(100, Math.round((download.done / download.total) * 100))}%`
+                          : '8%',
+                      backgroundColor: theme.accent,
+                      borderRadius: 2,
+                    }}
+                  />
+                </View>
+                <Text style={{ color: theme.subtext, fontSize: 11, marginTop: 2 }}>
+                  {download.done === 0
+                    ? 'Menunggu data'
+                    : download.total > 0
+                      ? `${(download.done / 1048576).toFixed(1)} / ${(download.total / 1048576).toFixed(1)} MB`
+                      : `${(download.done / 1048576).toFixed(1)} MB`}
+                  {download.speed > 0 ? ` • ${(download.speed / 1048576).toFixed(1)} MB/s` : ''}
+                </Text>
               </View>
-              <Text style={{ color: theme.subtext, fontSize: 11, marginTop: 2 }}>
-                {download.total > 0
-                  ? `${(download.done / 1048576).toFixed(1)} / ${(download.total / 1048576).toFixed(1)} MB`
-                  : `${(download.done / 1048576).toFixed(1)} MB`}
-                {download.speed > 0 ? ` • ${(download.speed / 1048576).toFixed(1)} MB/s` : ''}
-              </Text>
-            </View>
-            <Icon name="chevronRight" size={18} color={theme.subtext} />
-          </Pressable>
+            </Pressable>
+            <Pressable
+              hitSlop={8}
+              onPress={() => {
+                dismissedBanner.current = download.id;
+                setDownload(null);
+              }}
+              style={{ padding: 6 }}>
+              <Icon name="close" size={16} color={theme.subtext} />
+            </Pressable>
+          </View>
         ) : null}
       </View>
 

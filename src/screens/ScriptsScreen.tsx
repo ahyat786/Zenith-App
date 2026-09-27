@@ -76,32 +76,45 @@ export function ScriptsScreen() {
     }
   };
 
+  const blankScript = (): UserScript => ({
+    id: '',
+    code: '',
+    body: '',
+    meta: { runAt: 'document-idle', noframes: false, matches: [], includes: [], excludes: [], grants: [], requires: [] },
+    hasHeader: false,
+    enabled: true,
+    matchAll: false,
+    updatedAt: 0,
+  });
+
+  const installExample = async (code: string) => {
+    const parsed = await parseUserScript(code);
+    dispatch({
+      type: 'ADD_SCRIPT',
+      script: {
+        id: uid('us-'),
+        code,
+        body: parsed.body,
+        meta: parsed.meta,
+        hasHeader: parsed.hasHeader,
+        enabled: true,
+        matchAll: false,
+        updatedAt: Date.now(),
+      },
+    });
+  };
+
   const addActions: SheetAction[] = [
     {
       label: 'Tempel kode skrip baru',
       icon: 'pencil',
-      onPress: () => setEditing({ id: '', code: '', body: '', meta: { runAt: 'document-idle', noframes: false, matches: [], includes: [], excludes: [], grants: [], requires: [] }, hasHeader: false, enabled: true, matchAll: false, updatedAt: 0 }),
+      onPress: () => setEditing(blankScript()),
     },
     { label: 'Impor dari URL', icon: 'download', onPress: () => setImportOpen(true) },
     ...EXAMPLE_SCRIPTS.slice(0, 1).map((ex): SheetAction => ({
       label: `Contoh: ${ex.title}`,
       icon: 'zap',
-      onPress: async () => {
-        const parsed = await parseUserScript(ex.code);
-        dispatch({
-          type: 'ADD_SCRIPT',
-          script: {
-            id: uid('us-'),
-            code: ex.code,
-            body: parsed.body,
-            meta: parsed.meta,
-            hasHeader: parsed.hasHeader,
-            enabled: true,
-            matchAll: false,
-            updatedAt: Date.now(),
-          },
-        });
-      },
+      onPress: () => installExample(ex.code),
     })),
   ];
 
@@ -112,12 +125,22 @@ export function ScriptsScreen() {
       onBack={back}
       theme={theme}>
       {state.scripts.length === 0 ? (
-        <EmptyState
-          theme={theme}
-          icon="code"
-          title="Belum ada skrip"
-          subtitle="Userscript format Greasy Fork — tempel kodenya atau impor dari URL."
-        />
+        <View style={{ padding: spacing.lg, gap: 10 }}>
+          <EmptyState
+            theme={theme}
+            icon="code"
+            title="Belum ada skrip"
+            subtitle="Tempel userscript Greasy Fork, impor dari URL, atau pasang contoh bawaan."
+          />
+          <Button label="Tempel kode skrip" theme={theme} onPress={() => setEditing(blankScript())} />
+          <Button
+            label={`Contoh: ${EXAMPLE_SCRIPTS[0]?.title ?? 'skrip'}`}
+            kind="secondary"
+            theme={theme}
+            onPress={() => EXAMPLE_SCRIPTS[0] && installExample(EXAMPLE_SCRIPTS[0].code)}
+          />
+          <Button label="Impor dari URL" kind="secondary" theme={theme} onPress={() => setImportOpen(true)} />
+        </View>
       ) : null}
 
       <ScrollView nestedScrollEnabled>
@@ -182,9 +205,11 @@ export function ScriptsScreen() {
       </ScrollView>
 
       {/* tombol tambah mengambang */}
-      <View style={{ position: 'absolute', right: 20, bottom: 28 }}>
-        <Button label="＋ Skrip baru" theme={theme} onPress={() => setAddOpen(true)} />
-      </View>
+      {state.scripts.length > 0 ? (
+        <View style={{ position: 'absolute', right: 20, bottom: 28 }}>
+          <Button label="＋ Skrip baru" theme={theme} onPress={() => setAddOpen(true)} />
+        </View>
+      ) : null}
 
       <ActionSheet
         visible={addOpen}

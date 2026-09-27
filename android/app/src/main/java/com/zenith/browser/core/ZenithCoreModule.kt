@@ -133,4 +133,17 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
             tryStart(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         promise.resolve(opened)
     }
+
+    /** true bila WebView perangkat bisa memisahkan profil kuki tab privat. */
+    @ReactMethod
+    fun privateProfileSupported(promise: Promise) {
+        promise.resolve(com.zenith.browser.webview.ZenithPrivate.supported())
+    }
+
+    /** Hapus sesi profil privat saja. Tidak menyentuh kuki tab normal. */
+    @ReactMethod
+    fun clearPrivateSession(promise: Promise) {
+        com.zenith.browser.webview.ZenithPrivate.clear()
+        promise.resolve(true)
+    }
 }

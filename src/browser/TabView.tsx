@@ -267,7 +267,7 @@ export function TabView({ tab, active, theme }: Props) {
         onOpenWindow={(e: any) => {
           const target = e?.nativeEvent?.targetUrl;
           if (typeof target === 'string' && target) {
-            openNewTab(target);
+            openNewTab(target, { incognito: tab.incognito });
           }
         }}
         onRenderProcessGone={() => {
@@ -305,7 +305,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent="Zenith/0.4.2"
+        applicationNameForUserAgent="Zenith/0.4.3"
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

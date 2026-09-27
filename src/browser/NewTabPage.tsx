@@ -3,13 +3,14 @@
  * Pintasan (Firefox/Opera), pencarian, riwayat singkat (Chrome), ekstensi.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { hostOfUrl, useStore } from '../state/store';
 import type { Theme } from '../theme';
 import { radius, spacing } from '../theme';
 import type { Tab } from '../types';
 import { Icon } from '../ui/Icon';
+import { privateProfileSupported } from '../core/native';
 import { isNewTabUrl } from './newtab';
 
 const DEFAULTS = [
@@ -25,6 +26,13 @@ export function NewTabPage({ theme, tab }: { theme: Theme; tab?: Tab | null }) {
   const greeting =
     hour < 4 ? 'Selamat malam' : hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 19 ? 'Selamat sore' : 'Selamat malam';
   const privateTab = !!tab?.incognito;
+  const [isolated, setIsolated] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!privateTab) {
+      return;
+    }
+    privateProfileSupported().then(setIsolated).catch(() => setIsolated(false));
+  }, [privateTab]);
 
   const go = (url: string) => {
     if (tab && isNewTabUrl(tab.url)) {
@@ -49,7 +57,7 @@ export function NewTabPage({ theme, tab }: { theme: Theme; tab?: Tab | null }) {
       },
     });
 
-  const bookmarks = state.bookmarks.slice(0, 8);
+  const bookmarks = privateTab ? [] : state.bookmarks.slice(0, 8);
   const used = new Set(bookmarks.map((b) => b.url));
   const shortcuts = [
     ...bookmarks.map((b) => ({ label: b.title || hostOfUrl(b.url) || b.url, url: b.url })),
@@ -61,7 +69,7 @@ export function NewTabPage({ theme, tab }: { theme: Theme; tab?: Tab | null }) {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: theme.bg }}
+      style={{ flex: 1, backgroundColor: privateTab ? theme.accentSoft : theme.bg }}
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: 32 }}
       keyboardShouldPersistTaps="handled">
       <View style={{ alignItems: 'center', marginTop: 12, marginBottom: 18 }}>
@@ -79,8 +87,14 @@ export function NewTabPage({ theme, tab }: { theme: Theme; tab?: Tab | null }) {
           <Text style={{ fontSize: 34, fontWeight: '900', color: theme.accent }}>Z</Text>
         </View>
         <Text style={{ color: theme.text, fontSize: 22, fontWeight: '800', marginTop: 12 }}>{greeting}</Text>
-        <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 4 }}>
-          {privateTab ? 'Tab privat — tidak masuk riwayat' : 'Zenith'}
+        <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 4, textAlign: 'center', paddingHorizontal: 12 }}>
+          {privateTab
+            ? isolated
+              ? 'Mode privat — kuki terpisah, tidak masuk riwayat'
+              : isolated === false
+                ? 'Mode privat — riwayat tidak disimpan. Perangkat ini belum memisahkan kuki.'
+                : 'Mode privat — tidak masuk riwayat'
+            : 'Zenith'}
         </Text>
       </View>
 
@@ -101,10 +115,14 @@ export function NewTabPage({ theme, tab }: { theme: Theme; tab?: Tab | null }) {
       </Pressable>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 26, marginBottom: 12 }}>
-        <Text style={{ flex: 1, color: theme.subtext, fontSize: 14, fontWeight: '600' }}>Pintasan</Text>
-        <Pressable onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'bookmarks' })}>
-          <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 13 }}>Tampilkan semua</Text>
-        </Pressable>
+        <Text style={{ flex: 1, color: theme.subtext, fontSize: 14, fontWeight: '600' }}>
+          {privateTab ? 'Situs umum' : 'Pintasan'}
+        </Text>
+        {privateTab ? null : (
+          <Pressable onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'bookmarks' })}>
+            <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 13 }}>Tampilkan semua</Text>
+          </Pressable>
+        )}
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
         {home && /^https?:/i.test(home) ? (

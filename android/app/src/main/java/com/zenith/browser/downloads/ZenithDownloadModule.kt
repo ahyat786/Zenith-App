@@ -1,5 +1,7 @@
 package com.zenith.browser.downloads
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ContentValues
 import android.content.Intent
@@ -9,6 +11,8 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import android.webkit.MimeTypeMap
+import android.widget.Toast
+import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -72,6 +76,10 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         @Volatile var lastDone: Long = 0
         @Volatile var finishedAt: Long = 0
         @Volatile var fetchUrl: String = url
+        @Volatile var cookie: String? = null
+        @Volatile var startedAt: Long = 0
+        @Volatile var lastByteAt: Long = 0
+        @Volatile var liveConn: HttpURLConnection? = null
         val displayName: String get() = name
     }
 
@@ -86,6 +94,9 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     private val pool = Executors.newCachedThreadPool()
     private val reporter = Executors.newSingleThreadScheduledExecutor()
     private val historyLock = Any()
+    private val enqueueLock = Any()
+    private val lastNotice = ConcurrentHashMap<String, Long>()
+    private var askedNotify = false
 
     init {
         loadHistory()
@@ -99,7 +110,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun start(url: String, filename: String?, mime: String?, connections: Int, promise: Promise) {
         try {
-            promise.resolve(enqueue(url, filename, mime, connections))
+            promise.resolve(enqueue(url, filename, mime, connections, true, null))
         } catch (t: Throwable) {
             promise.reject("ZENITH_DL", t.message ?: t.toString(), t)
         }
@@ -194,19 +205,70 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun removeListeners(count: Int) { /* wajib untuk NativeEventEmitter */ }
 
-    fun enqueue(url: String, filenameIn: String?, mime: String?, connections: Int): String {
-        val guessedMime = mime?.takeIf { it.isNotBlank() }
-            ?: "application/octet-stream"
-        val name = cleanName(filenameIn, guessedMime, url)
-        val file = uniqueAppFile(name)
-        file.createNewFile()
-        val id = System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
-        val job = Job(id, url, null, file, guessedMime, connections.coerceIn(1, 4), name)
-        jobs[id] = job
-        persist()
-        emit(job)
-        pool.execute { runJob(job) }
-        return id
+    fun enqueue(
+        url: String,
+        filenameIn: String?,
+        mime: String?,
+        connections: Int,
+        force: Boolean = false,
+        cookie: String? = null,
+    ): String {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            notifyUser("Tidak dapat mengunduh", "Tautan ini bukan berkas http. Tidak diulang.")
+            return ""
+        }
+        synchronized(enqueueLock) {
+            val guessedMime = mime?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
+            val name = cleanName(filenameIn, guessedMime, url)
+            val key = url.substringBefore('#').trim()
+            val now = System.currentTimeMillis()
+            val active = jobs.values.find { job ->
+                sameItem(job, key, name) && (job.status == "connecting" || job.status == "downloading")
+            }
+            if (active != null) {
+                notifyUser("Unduhan sudah berjalan", active.name)
+                return active.id
+            }
+            if (!force) {
+                val recent = jobs.values.find { job ->
+                    sameItem(job, key, name) && job.status == "done" && now - job.finishedAt < 60_000
+                }
+                if (recent != null) {
+                    notifyUser("Sudah diunduh", "${recent.name} baru selesai. Tidak diulang.")
+                    return recent.id
+                }
+                val failed = jobs.values.find { job ->
+                    job.url.substringBefore('#') == key && job.status == "error" && now - job.finishedAt < 30_000
+                }
+                if (failed != null) {
+                    notifyUser("Unduhan gagal", failed.error ?: "Tidak diulang otomatis.")
+                    return failed.id
+                }
+            }
+            val file = uniqueAppFile(name)
+            file.createNewFile()
+            val id = System.currentTimeMillis().toString(36) + (0..999).random().toString(36)
+            val job = Job(id, url, null, file, guessedMime, connections.coerceIn(1, 4), name)
+            job.cookie = cookie
+            job.startedAt = now
+            job.lastByteAt = now
+            jobs[id] = job
+            persist()
+            emit(job)
+            pool.execute { runJob(job) }
+            return id
+        }
+    }
+
+    private fun sameItem(job: Job, key: String, name: String): Boolean {
+        if (job.url.substringBefore('#') == key) {
+            return true
+        }
+        val generic = name.equals("download", true) ||
+            name.equals("unduhan", true) ||
+            name.startsWith("download.", true) ||
+            name.startsWith("unduhan.", true)
+        return !generic && name.isNotBlank() && job.name.equals(name, true)
     }
 
     private fun appDir(): File {
@@ -266,7 +328,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         return name.take(160)
     }
 
-    private fun applyHeaders(conn: HttpURLConnection, rangeFrom: Long, rangeTo: Long) {
+    private fun applyHeaders(conn: HttpURLConnection, rangeFrom: Long, rangeTo: Long, cookie: String? = null) {
         conn.connectTimeout = 20000
         conn.readTimeout = 60000
         conn.instanceFollowRedirects = false
@@ -274,12 +336,13 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         conn.setRequestProperty("Accept", "*/*")
         conn.setRequestProperty("Accept-Encoding", "identity")
         conn.setRequestProperty("Accept-Language", "id,en;q=0.8")
-        try {
-            val cookie = android.webkit.CookieManager.getInstance().getCookie(conn.url?.toString())
-            if (!cookie.isNullOrBlank()) {
-                conn.setRequestProperty("Cookie", cookie)
-            }
+        val header = cookie ?: try {
+            android.webkit.CookieManager.getInstance().getCookie(conn.url?.toString())
         } catch (_: Throwable) {
+            null
+        }
+        if (!header.isNullOrBlank()) {
+            conn.setRequestProperty("Cookie", header)
         }
         if (rangeTo >= 0) {
             conn.setRequestProperty("Range", "bytes=$rangeFrom-$rangeTo")
@@ -289,12 +352,13 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     }
 
     /** Ikuti pengalihan sendiri supaya header Range tidak hilang (bug HttpURLConnection). */
-    private fun openConn(url: String, rangeFrom: Long, rangeTo: Long): HttpURLConnection {
+    private fun openConn(url: String, rangeFrom: Long, rangeTo: Long, cookie: String? = null, job: Job? = null): HttpURLConnection {
         var current = url
         var hops = 0
         while (hops < 8) {
             val conn = URL(current).openConnection() as HttpURLConnection
-            applyHeaders(conn, rangeFrom, rangeTo)
+            job?.liveConn = conn
+            applyHeaders(conn, rangeFrom, rangeTo, cookie)
             val code = conn.responseCode
             if (code in 300..399) {
                 val loc = conn.getHeaderField("Location")
@@ -311,14 +375,20 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         throw IOException("terlalu banyak pengalihan")
     }
 
-    /** URL akhir setelah pengalihan, tanpa mengirim Range (probe bytes=0-0 merusak unduhan APK). */
-    private fun resolve(start: String): Resolved {
-        var current = start
+    /**
+     * HEAD saja. GET lalu putus menghabiskan token sekali-pakai dan
+     * unduhan sungguhan dapat 0 byte — banner macet di 0.0 MB.
+     */
+    private fun resolve(job: Job): Resolved {
+        var current = job.url
         var hops = 0
         while (hops < 8) {
             val conn = URL(current).openConnection() as HttpURLConnection
+            job.liveConn = conn
             try {
-                applyHeaders(conn, -1, -1)
+                applyHeaders(conn, -1, -1, job.cookie)
+                conn.requestMethod = "HEAD"
+                conn.connectTimeout = 8000
                 val code = conn.responseCode
                 if (code in 300..399) {
                     val loc = conn.getHeaderField("Location")
@@ -335,9 +405,9 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         return Resolved(current, -1, -1, null)
     }
 
-    private fun confirmRange(url: String): Long {
+    private fun confirmRange(url: String, cookie: String?, job: Job): Long {
         val conn = try {
-            openConn(url, 0, 1)
+            openConn(url, 0, 1, cookie, job)
         } catch (_: Throwable) {
             return -1
         }
@@ -358,35 +428,36 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     private fun runJob(job: Job) {
         try {
             val resolved = try {
-                resolve(job.url)
+                resolve(job)
             } catch (_: Throwable) {
                 null
             }
             // Tetap mulai dari URL asli. Token CDN GitHub sering sekali pakai;
-            // tiap koneksi mengikuti pengalihan sendiri.
+            // tiap koneksi mengikuti pengalihan sendiri. HEAD yang gagal tidak
+            // membatalkan unduhan — GET sungguhan yang menentukan.
             job.fetchUrl = job.url
             if (resolved != null && resolved.code in 200..299 && resolved.total > 0) {
                 job.total = resolved.total
             }
             val ctype = resolved?.contentType ?: ""
-            if (resolved != null && (resolved.code == 401 || resolved.code == 403)) {
-                throw IOException("Server menolak unduhan (HTTP ${resolved.code}). Buka halaman sumber, lalu unduh lagi.")
-            }
-            if (job.name.endsWith(".apk", true) && ctype.contains("text/html", true)) {
+            if (
+                job.name.endsWith(".apk", true) &&
+                resolved != null &&
+                resolved.code in 200..299 &&
+                ctype.contains("text/html", true)
+            ) {
                 throw IOException("Server mengembalikan halaman, bukan APK. Buka halaman rilis, lalu ketuk berkasnya.")
-            }
-            if (resolved != null && resolved.code == 404) {
-                throw IOException("Berkas tidak ditemukan (HTTP 404).")
             }
 
             var rangedTotal = -1L
-            if ((job.total > MULTI_MIN || job.total < 0) && job.threads > 1) {
-                rangedTotal = confirmRange(job.fetchUrl)
+            if (job.total > MULTI_MIN && job.threads > 1) {
+                rangedTotal = confirmRange(job.fetchUrl, job.cookie, job)
                 if (rangedTotal > 0) {
                     job.total = rangedTotal
                 }
             }
             job.status = "downloading"
+            job.lastByteAt = System.currentTimeMillis()
             emit(job)
 
             val useMulti = rangedTotal > MULTI_MIN && job.threads > 1 && !job.cancel.get()
@@ -401,7 +472,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                     resetFile(job)
                     downloadPart(job, 0, -1)
                 }
-            } else {
+            } else if (!job.cancel.get()) {
                 downloadPart(job, 0, -1)
             }
 
@@ -433,6 +504,11 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                 job.done.set(job.file?.length() ?: job.done.get())
                 job.finishedAt = System.currentTimeMillis()
             }
+            if (job.status == "done") {
+                notifyUser("Unduhan selesai", job.name, "job:${job.id}")
+            } else if (job.status == "error") {
+                notifyUser("Unduhan gagal", job.error ?: job.name, "job:${job.id}")
+            }
             persist()
             emit(job)
         } catch (t: Throwable) {
@@ -444,10 +520,9 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                 job.error = t.message ?: t.toString()
             }
             job.finishedAt = System.currentTimeMillis()
-            if (job.status != "canceled") {
-                deleteTarget(job)
-            } else {
-                deleteTarget(job)
+            deleteTarget(job)
+            if (job.status == "error") {
+                notifyUser("Unduhan gagal", job.error ?: job.name, "job:${job.id}")
             }
             persist()
             emit(job)
@@ -505,7 +580,8 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         while (attempt < PART_RETRIES && !job.cancel.get() && (to < 0 || pos <= to)) {
             var conn: HttpURLConnection? = null
             try {
-                conn = openConn(job.fetchUrl, if (to < 0 && pos == 0L) -1 else pos, to)
+                conn = openConn(job.fetchUrl, if (to < 0 && pos == 0L) -1 else pos, to, job.cookie, job)
+                job.liveConn = conn
                 val code = conn.responseCode
                 if (from > 0 && code != 206) {
                     throw IOException("server menolak Range (HTTP $code)")
@@ -572,6 +648,9 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                     return
                 }
             } finally {
+                if (job.liveConn === conn) {
+                    job.liveConn = null
+                }
                 conn?.disconnect()
             }
         }
@@ -798,12 +877,102 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     }
 
     private fun reportAll() {
+        val now = System.currentTimeMillis()
         for (job in jobs.values) {
-            if (job.status == "downloading" || job.status == "connecting") {
-                val d = job.done.get()
-                job.speed = ((d - job.lastDone) * 1000) / 500
-                job.lastDone = d
-                emit(job)
+            if (job.status != "downloading" && job.status != "connecting") {
+                continue
+            }
+            val d = job.done.get()
+            if (job.startedAt == 0L) {
+                job.startedAt = now
+            }
+            if (d > job.lastDone) {
+                job.lastByteAt = now
+            }
+            if (job.lastByteAt == 0L) {
+                job.lastByteAt = job.startedAt
+            }
+            job.speed = ((d - job.lastDone) * 1000) / 500
+            job.lastDone = d
+            if (job.status == "connecting" && d == 0L && now - job.startedAt > 45_000) {
+                stall(job, "Tidak ada data. Unduhan dihentikan agar tidak mengulang.")
+                continue
+            }
+            if (job.status == "downloading" && d == 0L && now - job.lastByteAt > 20_000) {
+                stall(job, "Tidak ada data. Unduhan dihentikan agar tidak mengulang.")
+                continue
+            }
+            if (d > 0L && now - job.lastByteAt > 90_000) {
+                stall(job, "Unduhan terhenti.")
+                continue
+            }
+            emit(job)
+        }
+    }
+
+    private fun stall(job: Job, message: String) {
+        if (job.status != "connecting" && job.status != "downloading") {
+            return
+        }
+        job.error = message
+        job.cancel.set(true)
+        job.status = "error"
+        job.finishedAt = System.currentTimeMillis()
+        try {
+            job.liveConn?.disconnect()
+        } catch (_: Throwable) {
+        }
+        notifyUser("Unduhan dihentikan", message, "job:${job.id}")
+        persist()
+        emit(job)
+    }
+
+    fun notifyUser(title: String, text: String, dedupeKey: String = "$title|$text") {
+        val now = System.currentTimeMillis()
+        val key = dedupeKey
+        val prev = lastNotice[key] ?: 0L
+        if (now - prev < 8_000) {
+            return
+        }
+        lastNotice[key] = now
+        val ctx = reactApplicationContext
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                Toast.makeText(ctx, "$title — $text", Toast.LENGTH_LONG).show()
+            } catch (_: Throwable) {
+            }
+            if (!askedNotify && Build.VERSION.SDK_INT >= 33) {
+                askedNotify = true
+                val act = ctx.currentActivity
+                if (act != null && ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    try {
+                        act.requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 4104)
+                    } catch (_: Throwable) {
+                    }
+                }
+            }
+            try {
+                val canNotify = Build.VERSION.SDK_INT < 33 ||
+                    ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+                val nm = ctx.getSystemService(NotificationManager::class.java)
+                if (canNotify && nm != null) {
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        nm.createNotificationChannel(
+                            NotificationChannel("zenith-downloads", "Unduhan", NotificationManager.IMPORTANCE_DEFAULT),
+                        )
+                    }
+                    val n = NotificationCompat.Builder(ctx, "zenith-downloads")
+                        .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                        .setContentTitle(title)
+                        .setContentText(text)
+                        .setAutoCancel(true)
+                        .build()
+                    nm.notify(key.hashCode(), n)
+                }
+            } catch (_: Throwable) {
             }
         }
     }

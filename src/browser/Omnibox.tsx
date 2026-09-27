@@ -65,7 +65,7 @@ export function Omnibox({ theme }: { theme: Theme }) {
       return;
     }
     const { url, isSearch } = await resolveInput(q);
-    if (remember && isSearch) {
+    if (remember && isSearch && !omnibox.incognito && !activeTab?.incognito) {
       dispatch({ type: 'ADD_RECENT_SEARCH', query: q });
     }
     if (!url) {
@@ -155,7 +155,7 @@ export function Omnibox({ theme }: { theme: Theme }) {
             });
           }
         }
-        for (const h of state.history
+        for (const h of (omnibox.incognito ? [] : state.history)
           .map((h) => ({ h, s: fuzzyScore(`${h.url} ${h.title}`, q) }))
           .filter((x) => x.s >= 0)
           .sort((a, b) => b.s - a.s)

@@ -18,26 +18,30 @@ export function ListSection({
   title,
   children,
   theme,
+  right,
 }: {
   title?: string;
   children: React.ReactNode;
   theme: Theme;
+  right?: React.ReactNode;
 }) {
   return (
     <View style={{ marginTop: spacing.lg }}>
       {title ? (
-        <Text
-          style={{
-            color: theme.subtext,
-            fontSize: 12.5,
-            fontWeight: '700',
-            textTransform: 'uppercase',
-            letterSpacing: 0.7,
-            marginHorizontal: spacing.lg,
-            marginBottom: spacing.sm,
-          }}>
-          {title}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.lg, marginBottom: spacing.sm }}>
+          <Text
+            style={{
+              flex: 1,
+              color: theme.subtext,
+              fontSize: 12.5,
+              fontWeight: '700',
+              textTransform: 'uppercase',
+              letterSpacing: 0.7,
+            }}>
+            {title}
+          </Text>
+          {right}
+        </View>
       ) : null}
       <View
         style={{

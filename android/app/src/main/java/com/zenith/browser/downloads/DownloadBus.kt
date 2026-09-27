@@ -4,11 +4,15 @@ import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.webkit.CookieManager
+import android.webkit.URLUtil
+import android.webkit.WebView
+import android.widget.Toast
+import com.zenith.browser.webview.ZenithPrivate
 
 /**
- * Titik masuk unduhan dari WebView (ZenithWebViewManager).
- * fast=true (default, ala Via) → ZenithDownloadModule multi-thread;
- * fast=false → DownloadManager sistem.
+ * Jembatan unduhan WebView. Hanya http(s). URL yang sama tidak diantre dua kali;
+ * pemicu kedua memunculkan pemberitahuan.
  */
 object DownloadBus {
     @Volatile
@@ -17,40 +21,93 @@ object DownloadBus {
     @Volatile
     var fastEnabled: Boolean = true
 
-    private val pending = mutableListOf<Array<String>>() // [url, filename, mime]
+    private val pending = ArrayDeque<Pending>()
 
-    fun request(context: Context, url: String, filename: String, mime: String) {
-        val m = module
-        when {
-            fastEnabled && m != null -> m.enqueue(url, filename, mime, 4)
-            fastEnabled -> synchronized(pending) { pending.add(arrayOf(url, filename, mime)) }
-            else -> systemDownload(context, url, filename, mime)
+    private data class Pending(
+        val url: String,
+        val filename: String?,
+        val mime: String?,
+        val cookie: String?,
+    )
+
+    fun request(
+        view: WebView,
+        url: String?,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimetype: String?,
+        contentLength: Long,
+    ) {
+        if (url.isNullOrBlank()) return
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            toast(
+                view.context,
+                "Tautan ini bukan berkas http. Tidak diunduh, dan tidak akan diulang.",
+            )
+            return
+        }
+        val filename = URLUtil.guessFileName(url, contentDisposition, mimetype)
+        val mime = mimetype?.substringBefore(';')?.trim()?.ifBlank { null }
+        val cookie = ZenithPrivate.cookies(view, url)
+        val mod = module
+        if (fastEnabled && mod != null) {
+            mod.enqueue(url, filename, mime, 4, false, cookie)
+            return
+        }
+        synchronized(pending) {
+            if (pending.none { it.url.substringBefore('#') == url.substringBefore('#') }) {
+                pending.add(Pending(url, filename, mime, cookie))
+            }
+        }
+        if (!fastEnabled) {
+            systemDownload(view.context, url, userAgent, filename, mime, contentLength, cookie)
         }
     }
 
     fun drainPending() {
-        val m = module ?: return
-        synchronized(pending) {
-            for (a in pending) {
-                m.enqueue(a[0], a[1], a[2], 4)
-            }
+        val mod = module ?: return
+        val batch = synchronized(pending) {
+            val copy = pending.toList()
             pending.clear()
+            copy
+        }
+        for (item in batch) {
+            mod.enqueue(item.url, item.filename, item.mime, 4, false, item.cookie)
         }
     }
 
-    private fun systemDownload(context: Context, url: String, filename: String, mime: String) {
+    private fun systemDownload(
+        context: Context,
+        url: String,
+        userAgent: String?,
+        filename: String?,
+        mime: String?,
+        contentLength: Long,
+        cookie: String?,
+    ) {
         try {
             val req = DownloadManager.Request(Uri.parse(url))
+            val jar = cookie ?: CookieManager.getInstance().getCookie(url)
+            if (!jar.isNullOrBlank()) req.addRequestHeader("Cookie", jar)
+            if (!userAgent.isNullOrBlank()) req.addRequestHeader("User-Agent", userAgent)
             req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
-            req.setTitle(filename)
-            req.setMimeType(
-                if (filename.endsWith(".apk", true)) "application/vnd.android.package-archive" else mime,
+            req.setDestinationInExternalPublicDir(
+                Environment.DIRECTORY_DOWNLOADS,
+                filename ?: "unduhan",
             )
-            (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
-        } catch (_: Throwable) {
-            // perangkat lama tanpa izin tulis — diabaikan; pengguna bisa
-            // mengaktifkan kembali mode unduhan cepat milik aplikasi.
+            if (!mime.isNullOrBlank()) req.setMimeType(mime)
+            if (contentLength > 0) req.setDescription("$contentLength B")
+            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            dm.enqueue(req)
+        } catch (t: Throwable) {
+            toast(context, "Gagal mengunduh: ${t.message}")
+        }
+    }
+
+    private fun toast(context: Context, text: String) {
+        val app = context.applicationContext
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            Toast.makeText(app, text, Toast.LENGTH_LONG).show()
         }
     }
 }
