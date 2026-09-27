@@ -1,222 +1,246 @@
-<div align="center">
+<p align="center">
+  <img src="art/readme/hero.png" alt="Zenith Browser — cepat, ringan, privat" width="880" />
+</p>
 
-# 🅧 Zenith Browser
+<p align="center">
+  <a href="https://github.com/ahyat786/Zenith-App/releases/latest/download/Zenith-android.apk">
+    <img src="art/readme/btn-download.png" alt="Unduh APK rilis terbaru" height="72" />
+  </a>
+  &nbsp;&nbsp;
+  <a href="https://github.com/ahyat786/Zenith-App/releases/latest">
+    <img src="art/readme/btn-releases.png" alt="Semua rilis" height="72" />
+  </a>
+</p>
 
-**Browser Android ringan bergaya [Zen](https://github.com/zen-browser/docs) — dengan skrip ala [Via](https://github.com/tuyafeng/Via), ekstensi ala [Kiwi](https://github.com/kiwibrowser/src.next), dan shields ala [Brave](https://github.com/brave/brave-browser) — dibangun dengan Rust + React Native.**
+<p align="center">
+  <a href="https://github.com/ahyat786/Zenith-App/releases/latest"><img alt="Rilis" src="https://img.shields.io/github/v/release/ahyat786/Zenith-App?style=flat-square&label=rilis&color=8b7cf6" /></a>
+  <img alt="Android 7.0 sampai 16+" src="https://img.shields.io/badge/Android-7.0%20%E2%80%93%2016%2B-3DDC84?style=flat-square&logo=android&logoColor=white" />
+  <a href="https://github.com/ahyat786/Zenith-App/actions/workflows/android.yml"><img alt="Status build" src="https://img.shields.io/github/actions/workflow/status/ahyat786/Zenith-App/android.yml?style=flat-square&label=build" /></a>
+  <a href="./LICENSE"><img alt="Lisensi MIT" src="https://img.shields.io/badge/lisensi-MIT-C9A227?style=flat-square" /></a>
+</p>
 
-`Rust Core (JNI)` · `React Native UI` · `WebView Android` · `Android 7.0 → 16+`
-
-**Built with 🩷 Pistis Litae**
-
-</div>
+<p align="center">
+  <strong>Browser Android yang tenang.</strong> Omnibox mengambang, perisai di samping alamat, inti Rust.<br />
+  Tanpa telemetri. Tanpa iklan. Semua data tetap di perangkat.<br />
+  <sub>Tombol unduh mengambil berkas langsung — bukan halaman rilis. Selalu rilis terbaru.</sub>
+</p>
 
 ---
 
-## ✨ Tentang Zenith
+## Unduh
 
-Zenith menggabungkan tiga filosofi browser ke satu aplikasi Android native yang ringan:
+Tombol di atas mengarah ke:
 
-| Sumber | Yang diambil | Implementasi di Zenith |
-| --- | --- | --- |
-| **Zen Browser** (docs) | Workspaces, Compact Mode, Split View, Glance, omnibox mengambang tanpa NTP, mesin pencari kustom `%s` | Workspaces berikon, mode kompak, split 2 panel, pratinjau cepat (Glance) via tekan-lama tautan, omnibox mengambang, pengelola mesin pencari |
-| **Via Browser** (tuyafeng) | Userscript `// ==UserScript==` format Greasy Fork, pengaturan per-situs (JS/UA/iklan), filosofi "ringan & tanpa iklan" | Manajer skrip (tempel/impor URL/urutan jalan), parser metadata di Rust, pengaturan per-situs, pemblokir iklan level jaringan |
-| **Kiwi Browser** (src.next) | Dukungan ekstensi Chrome (MV2/MV3) | **Subset kompatibel**: impor `.zip` ekstensi, parsing manifest, injeksi `content_scripts` (js/css + `matches` + `run_at`), shim `chrome.storage`/`chrome.runtime` mini |
+**[Unduh APK rilis terbaru](https://github.com/ahyat786/Zenith-App/releases/latest/download/Zenith-android.apk)**
 
-**Tanpa telemetri. Tanpa iklan. Semua data lokal.**
+GitHub mengalihkan tautan itu ke aset `Zenith-android.apk` pada [rilis terbaru](https://github.com/ahyat786/Zenith-App/releases/latest). Setiap tag juga menyimpan salinan berversi, `Zenith-vX.Y.Z-android.apk`, bila Anda perlu berkas yang tidak berubah.
 
-## 🏗️ Arsitektur
-
-```
-┌────────────────────────────────────────────────────────┐
-│  UI — React Native (TypeScript)                        │
-│  BrowserScreen · Omnibox · TabSwitcher · Glance ·       │
-│  Workspaces · Settings · Scripts · Extensions           │
-└───────────────┬────────────────────────────────────────┘
-                │  NativeModules.ZenithCore (Promise/JSON)
-┌───────────────▼────────────────────────────────────────┐
-│  Zenith Core — Rust (libzenith_core.so, 4 ABI)          │
-│  • userscript.rs : parser @match/@include/@exclude      │
-│  • extension.rs  : parser manifest MV2/MV3              │
-│  • pattern.rs    : match-pattern Chromium + glob GM     │
-│  • adblock.rs    : mesin blokir hosts + allowlist       │
-│  • urlkit.rs     : normalisasi omnibox & %s             │
-└───────────────┬────────────────────────────────────────┘
-                │  JNI (com.zenith.browser.core.ZenithCoreJNI)
-┌───────────────▼────────────────────────────────────────┐
-│  Kotlin — ZenithWebViewClient                           │
-│  shouldInterceptRequest → blokir iklan di level jaringan│
-│  react-native-webview + inject script/ekstensi/CSS      │
-└────────────────────────────────────────────────────────┘
-```
-
-**Alur injeksi skrip (bebas race):**
-1. `BRIDGE_SCRIPT` statis disuntik di `document-start` (via `injectedJavaScriptBeforeContentLoaded`).
-2. Jembatan mengirim sinyal `zen:docstart` / `zen:docend` / `zen:docidle` (dan `zen:urlchange` untuk SPA).
-3. Setiap sinyal → pola dicocokkan di **Rust** → payload skrip/ekstensi/CSS disuntik idempoten (guard per skrip).
-4. Bila `libzenith_core.so` tidak ada, semua otomatis fallback ke implementasi TypeScript.
-
-## 📱 Fitur
-
-- **Omnibox mengambang (Zen)** — tombol `+` membuka URL bar di atas tab saat ini; tanpa halaman tab baru khusus. Saran dari mesin pencari + riwayat + bookmark + tab terbuka.
-- **Workspaces (Zen)** — kelompokkan tab per aktivitas (emoji + nama), pindah tab antar workspace.
-- **Compact mode (Zen)** — sembunyikan semua bar untuk browsing penuh.
-- **Split view (Zen)** — dua tab berdampingan (tahan card tab → *Split dengan tab ini*).
-- **Glance (Zen)** — tekan-lama tautan → *Pratinjau cepat*: pratinjau melayang tanpa meninggalkan halaman, bisa di-expand ke tab baru atau di-split.
-- **Skrip (format Via)** — userscript format Greasy Fork: `@name`, `@match`, `@include`/`@exclude` (glob/regex), `@run-at`, `@grant`; impor dari URL atau tempel kode; aktif/mati + urutan jalan; shim `GM_*` (`GM_addStyle`, `GM_get/set/Value`, `GM_listValues`, `unsafeWindow`).
-- **Ekstensi (subset Kiwi)** — impor ZIP ber-`manifest.json` (MV2/MV3); `content_scripts` disuntik sesuai `matches`/`exclude_matches`/`run_at`; shim `chrome.storage.local` & `chrome.runtime.sendMessage`. ⚠️ *Service worker/background tidak dijalankan (batas WebView).*
-- **Pemblokir iklan level jaringan** — daftar hosts bawaan (aman, terkurasi) + impor daftar besar (StevenBlack/adAway) dari URL; allowlist per situs; statistik jumlah blokir; diblokir di `shouldInterceptRequest` (Kotlin→Rust) — bukan sekadar CSS.
-- **Pengaturan situs (Via)** — per host: matikan JavaScript, matikan pemblokir, UA desktop/kustom, CSS kustom (userstyle).
-- **Mesin pencari kustom (Zen)** — URL templat `%s` + URL saran; Google/DuckDuckGo/Bing/Wikipedia ID bawaan.
-- **Unduhan cepat multi-thread** — mesin unduhan **multi-thread (4 koneksi + Range paralel)** di Kotlin: banner progres + kecepatan langsung di browser, layar Unduhan (mulai dari URL, batal, buka, bagikan, hapus), fallback opsional ke DownloadManager sistem.
-- **Shields (Brave)** — tombol perisai dengan **penghitung blokir real-time**, panel per-situs (blokir iklan, JavaScript, HTTPS), **upgrade HTTPS otomatis** (http → https), dan mesin pencari **Brave Search** bawaan.
-- **Tab privat** 🕶, bookmark, riwayat (500 entri), pencarian terakhir di omnibox, sesi dipulihkan otomatis, tema gelap/terang/sistem, bar bawah atau atas.
-- **Android 7.0 (API 24) → Android 16/17 (API 36/37)** — satu APK universal 4 ABI.
-
-## 📂 Struktur proyek
-
-```
-Zenith/
-├── App.tsx                     # Root + router layar
-├── index.js                    # Registrasi AppRegistry
-├── src/
-│   ├── browser/                # BrowserScreen, TabView (WebView+injeksi),
-│   │                           # Omnibox, TabSwitcher, GlanceView, refs
-│   ├── screens/                # Settings, Scripts, Extensions,
-│   │                           # SiteSettings, About
-│   ├── core/                   # native.ts (JNI), plan.ts (perencana injeksi),
-│   │                           # inject.ts (bridge/shim JS), userscriptFallback.ts,
-│   │                           # suggest.ts, examples.ts
-│   ├── state/                  # store.tsx (Context+Reducer+AsyncStorage), defaults
-│   ├── ui/                     # Icon (SVG), kit (Row/Sheet/…), ScreenShell, theme
-│   └── types.ts
-├── android/
-│   └── app/src/main/java/com/zenith/browser/
-│       ├── core/               # ZenithCoreJNI (JNI), ZenithCoreModule (RN), Package
-│       ├── webview/            # ZenithWebViewManager/Client/Package (ad-block jaringan)
-│       ├── MainActivity.kt · MainApplication.kt
-│   └── app/build.gradle        # task buildRustCore (cargo-ndk → jniLibs)
-├── rust/
-│   ├── build-android.sh        # cargo-ndk 4 ABI → libzenith_core.so
-│   └── zenith-core/src/        # pattern, userscript, extension, adblock, urlkit, jni
-└── .github/workflows/android.yml  # CI build APK
-```
-
-## 📦 Rilis
-
-Unduh APK langsung dari **[GitHub Releases](https://github.com/ahyat786/Zenith-App/releases)** — dikompilasi otomatis oleh GitHub Actions:
-
-| Properti | Nilai |
+| | |
 | --- | --- |
-| Rilis terkini | [v0.2.0](https://github.com/ahyat786/Zenith-App/releases/latest) (`Zenith-v0.2.0-android.apk`, universal, ±70 MB) |
-| Paket | `com.zenith.browser` v0.2.0 (versionCode 3) |
-| Kompatibilitas | **Android 7.0 (API 24) → Android 16/17 (API 36/37)** |
-| ABI | arm64-v8a, armeabi-v7a, x86, x86_64 |
-| Engine JS | Hermes |
-| Inti Rust | `libzenith_core.so` (1.3–2.2 MB per ABI) |
-| Tanda tangan | **Kunci rilis** (dari GitHub Secrets, diverifikasi `apksigner` di CI) |
+| Paket | `com.zenith.browser` |
+| Kompatibilitas | Android 7.0 (API 24) → Android 16/17 |
+| ABI | arm64-v8a, armeabi-v7a, x86, x86_64 — satu APK |
+| Mesin | Hermes + `libzenith_core.so` |
+| Tanda tangan | Kunci rilis, diperiksa `apksigner` di GitHub Actions |
 
-**Instal:** unduh APK → buka → izinkan "instal dari sumber tidak dikenal" → selesai.
-Atau via ADB: `adb install Zenith-v0.1.1-android.apk`
+**Pasang**
 
-> Ingin APK lebih kecil (~30 MB)? Batasi ABI di `android/gradle.properties`:
-> `reactNativeArchitectures=arm64-v8a,armeabi-v7a` lalu build ulang.
+1. Unduh APK.
+2. Buka berkas dan izinkan pemasangan dari sumber ini.
+3. Selesai. Tidak ada akun.
 
-## 🔐 Keamanan & penandatanganan
+Lewat ADB: `adb install -r Zenith-android.apk`
 
-**Tidak ada kunci, token, atau password yang di-commit ke repo ini.**
+Nama `Zenith-android.apk` adalah kontrak tombol unduh. Workflow rilis menyalin APK ke nama itu pada setiap tag. Jangan diubah.
 
-Penandatanganan rilis memakai 4 [GitHub Secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions) (terenkripsi, *write-only*):
+---
+
+## Antarmuka
+
+<p align="center">
+  <img src="art/readme/ui-map.png" alt="Peta antarmuka Zenith: workspace, Shield Guard, omnibox, Glance, tab baru, dan mode desktop" width="880" />
+</p>
+
+Angka pada skema di atas adalah keputusan, bukan hiasan. Enam hal itu tidak pindah tempat.
+
+| | Sentuh | Yang terjadi |
+| --- | --- | --- |
+| **＋** | Sekali | Omnibox terbuka di atas tab saat ini. Tidak ada halaman tab-baru. |
+| **Pil alamat** | Sekali | Cari, sunting URL, atau loncat ke tab, bookmark, dan riwayat. |
+| **Perisai** | Sekali | Shield Guard untuk situs ini: blokir, JavaScript, HTTPS, desktop, log hostname. |
+| **Tautan** | Tekan lama | Tab baru, tab privat, Glance, atau bagikan. Glance tidak masuk riwayat. |
+| **Kartu tab** | Tekan lama | Split, masuk grup, atau pindah workspace. |
+| **Monitor** | Sekali | Mode desktop untuk host ini saja. Pil alamat menandai `DESKTOP`. |
+| **Bintang** | Sekali | Bookmark halaman ini. |
+| **Kompak** | Dari menu | Semua bar disembunyikan. Konten memakai seluruh layar. |
+
+Bar alat, dari kiri: kembali, maju, muat ulang (berubah menjadi berhenti saat memuat), tab baru, jumlah tab, desktop, menu. Menu membawa pengaturan, skrip, ekstensi, dan unduhan — bukan ke dalam omnibox.
+
+---
+
+## Yang ada di tangan
+
+<table>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <img src="art/readme/icon-zen.png" width="72" alt="" /><br />
+      <strong>Ruang yang tenang</strong><br />
+      <sub>Workspace, mode kompak, split dua panel, dan Glance. Omnibox mengambang — layar tidak dibuka dengan halaman kosong.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="art/readme/icon-shield.png" width="72" alt="" /><br />
+      <strong>Shield Guard</strong><br />
+      <sub>Blokir iklan di level jaringan, penghitung di perisai, log hostname, upgrade HTTPS, serta DNS utama dan cadangan.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="art/readme/icon-script.png" width="72" alt="" /><br />
+      <strong>Skrip dan ekstensi</strong><br />
+      <sub>Userscript format Greasy Fork. Subset ekstensi Chrome lewat content script. Batasnya ditulis di bawah, bukan disembunyikan.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <img src="art/readme/icon-download.png" width="72" alt="" /><br />
+      <strong>Unduhan yang selesai</strong><br />
+      <sub>Empat koneksi paralel, progres dan kecepatan di layar Unduhan, lalu buka atau bagikan. Bisa jatuh ke unduhan sistem.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="art/readme/icon-lock.png" width="72" alt="" /><br />
+      <strong>Tetap di perangkat</strong><br />
+      <sub>Tanpa telemetri. Riwayat, bookmark, skrip, ekstensi, dan pengaturan tidak dikirim ke mana pun.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="art/readme/icon-layers.png" width="72" alt="" /><br />
+      <strong>Satu APK, empat ABI</strong><br />
+      <sub>Android 7.0 sampai 16/17. Inti Rust, antarmuka React Native, mesin Hermes. Bila `.so` tidak ada, pola jatuh ke TypeScript.</sub>
+    </td>
+  </tr>
+</table>
+
+### Shield Guard
+
+Perisai duduk di kiri alamat karena itulah yang paling sering dibutuhkan, bukan di dalam pengaturan.
+
+- Blokir iklan dan pelacak di `shouldInterceptRequest`, bukan sekadar CSS.
+- Angka pada perisai adalah permintaan yang diblokir di sesi ini.
+- Log koneksi menampilkan hostname beserta statusnya: halaman, lolos, atau diblokir.
+- JavaScript, upgrade HTTPS, dan mode desktop bisa diubah per situs.
+- Daftar blokir bawaan, plus impor hosts (StevenBlack, AdAway) atau format Pi-hole.
+- DNS Aman: kelompok server utama dan cadangan, uji resolusi, dan panduan DNS Privat Android. Menerapkan DNS ke seluruh koneksi tetap lewat pengaturan sistem — bukan VPN di dalam browser.
+
+### Skrip dan ekstensi
+
+- Metadata userscript (`@name`, `@match`, `@include`, `@exclude`, `@run-at`, `@grant`) diurai di Rust.
+- Shim `GM_addStyle`, `GM_getValue`, `GM_setValue`, `GM_listValues`, `unsafeWindow`.
+- Ekstensi: impor ZIP berisi `manifest.json` (MV2/MV3). `content_scripts` disuntik sesuai `matches` dan `run_at`.
+- Shim kecil untuk `chrome.storage.local` dan `chrome.runtime.sendMessage`.
+- Service worker, `webRequest`, dan `declarativeNetRequest` tidak dijalankan. Itu batas WebView, bukan daftar tunggu yang disamarkan.
+
+### Lainnya, singkat
+
+Mesin pencari kustom dengan `%s` dan URL saran. Google, DuckDuckGo, Bing, Wikipedia, dan Brave Search tersedia dari awal. Riwayat 500 entri. Sesi dipulihkan. Tema gelap, terang, atau ikut sistem. Bar bisa di bawah atau di atas.
+
+---
+
+## Arsitektur
+
+```mermaid
+flowchart TB
+  UI["Antarmuka · React Native"] --> Core["Zenith Core · Rust"]
+  Core --> JNI["JNI · Kotlin"]
+  JNI --> WV["WebView · blokir di jaringan"]
+```
+
+Tiga lapis, satu arah.
+
+| Lapis | Isi |
+| --- | --- |
+| TypeScript | Browser, omnibox, tab, workspace, Glance, pengaturan |
+| Rust | Pola URL, userscript, manifest ekstensi, adblock, normalisasi `%s` |
+| Kotlin | Jembatan JNI, `shouldInterceptRequest`, unduhan multi-thread |
+
+Injeksi skrip tidak berpacu dengan halaman. Jembatan statis masuk di `document-start`, lalu mengirim `zen:docstart`, `zen:docend`, dan `zen:docidle`. Setiap sinyal dicocokkan di Rust, lalu payload disuntik sekali. Untuk SPA ada `zen:urlchange`.
+
+---
+
+## Bangun sendiri
+
+Node 22, JDK 17, Android SDK (platform 37, build-tools 37), NDK `27.1.12297006`, Rust stable, dan `cargo-ndk`.
+
+```bash
+rustup target add aarch64-linux-android armv7-linux-androideabi \
+  x86_64-linux-android i686-linux-android
+cargo install cargo-ndk
+
+npm install
+cd android && ./gradlew assembleRelease
+```
+
+APK ada di `android/app/build/outputs/apk/release/`. Tanpa variabel kunci rilis, Gradle memakai kunci debug. Itu untuk pengembangan, bukan berkas yang tombol unduh berikan.
+
+Lewati kompilasi Rust bila `.so` sudah ada: `./gradlew assembleRelease -Pzenith.skipRust=1`. Uji inti saja: `cd rust && cargo test`.
+
+APK lebih kecil, sekitar 30 MB, dengan membatasi ABI di `android/gradle.properties`:
+
+```
+reactNativeArchitectures=arm64-v8a,armeabi-v7a
+```
+
+GitHub Actions (`.github/workflows/android.yml`) membangun APK pada push ke `main`, tag `v*`, dan `workflow_dispatch`. Rilis GitHub dibuat hanya dari tag.
+
+---
+
+## Tanda tangan
+
+Tidak ada kunci, token, atau kata sandi di repositori ini.
 
 | Secret | Isi |
 | --- | --- |
-| `ZENITH_KEYSTORE_BASE64` | Keystore PKCS12 (base64) — kunci rilis RSA-4096 |
-| `ZENITH_KEYSTORE_PASSWORD` | Password keystore |
-| `ZENITH_KEYSTORE_ALIAS` | Alias kunci (`zenith`) |
-| `ZENITH_KEY_PASSWORD` | Password kunci |
+| `ZENITH_KEYSTORE_BASE64` | Keystore PKCS12, RSA-4096, disimpan sebagai base64 |
+| `ZENITH_KEYSTORE_PASSWORD` | Kata sandi keystore |
+| `ZENITH_KEYSTORE_ALIAS` | Alias, `zenith` |
+| `ZENITH_KEY_PASSWORD` | Kata sandi kunci |
 
-Alurnya: CI me-decode secret → file sementara → Gradle menandatangani via env `ZENITH_KEYSTORE_*` →
-`apksigner verify` mencetak sertifikat di log sebagai bukti. Build lokal tanpa env tersebut
-otomatis fallback ke debug key (pengembangan).
+CI men-decode secret ke berkas sementara, Gradle menandatangani lewat env `ZENITH_KEYSTORE_*`, lalu `apksigner verify` mencetak sertifikat di log. Secret GitHub tidak bisa dibaca ulang. Simpan keystore di pengelola kata sandi. Rotasi: `scripts/generate-release-keystore.sh`, lalu perbarui keempat secret.
 
-**Rotasi kunci / ganti keystore:** jalankan `scripts/generate-release-keystore.sh`, lalu perbarui
-keempat secret di GitHub (Settings → Secrets and variables → Actions). Simpan keystore +
-password di password manager — GitHub Secrets tidak bisa dibaca ulang setelah disimpan.
+Jangan menaruh token akses di kode, README, atau perintah git yang ter-commit. Bila token sempat tertulis di chat atau log, cabut di GitHub → Settings → Developer settings.
 
-**Hygiene token:** jangan pernah menaruh token akses di kode/perintah git. Jika token sempat
-terpapar, segera *revoke* di GitHub → Settings → Developer settings → Fine-grained tokens.
+---
 
-## 🔨 Build
+## Batasan
 
-### Prasyarat
-- Node ≥ 22, JDK 17, Android SDK (platform 37, build-tools 37), NDK 27.1
-- Rust stable + `cargo-ndk` + 4 target Android:
-  ```bash
-  rustup target add aarch64-linux-android armv7-linux-androideabi \
-                   x86_64-linux-android i686-linux-android
-  cargo install cargo-ndk
-  ```
-
-### Langkah
-```bash
-npm install                 # dependensi JS
-# Inti Rust dikompilasi otomatis oleh Gradle (task buildRustCore).
-cd android
-./gradlew assembleRelease   # APK → app/build/outputs/apk/release/
-# Lewati build Rust (pakai .so yang ada):
-# ./gradlew assembleRelease -Pzenith.skipRust=1
-```
-
-APK debug: `./gradlew assembleDebug`. Jalankan di emulator: `npm run android`.
-
-> **Inti Rust saja** (uji unit di host): `cd rust && cargo test` — 21 test.
-
-### Ringan
-- `.so` Rust hanya 1–2 MB per ABI (`opt-level=z`, LTO, strip).
-- Depedensi native minimal: webview, safe-area, async-storage, svg.
-- APK bisa diperkecil dengan membatasi ABI di `android/gradle.properties`:
-  `reactNativeArchitectures=arm64-v8a,armeabi-v7a`
-
-## ⚠️ Batasan (jujur)
-
-| Batas | Penjelasan |
+| Batas | Artinya |
 | --- | --- |
-| Mesin render = WebView | Sama seperti Via. Kecepatan & dukungan standar web mengikuti Android System WebView di perangkat. |
-| Ekstensi = subset content scripts | Background/service worker, `webRequest`, `declarativeNetRequest` milik ekstensi tidak bisa berjalan di WebView. Kiwi (fork Chromium) bisa; Zenith tidak. |
-| Tab privat | Cookie tetap milik profil WebView bersama (batas Android < API 28); yang privat: tidak dicatat ke riwayat/saran/penyimpanan aplikasi. |
-| `@run-at document-start` | Best-effort: injeksi terjadi beberapa ms setelah sinyal document-start (via bridge), bukan sebelum skrip halaman pertama. |
-| Match pattern | `*://`, `http(s)`, `*.host`, glob `*`, regex `/.../`; `file://` dan `.tld` tidak didukung. |
+| Mesin render adalah WebView | Kecepatan dan standar web mengikuti System WebView di perangkat. Sama seperti Via. |
+| Ekstensi = content script | Background, service worker, dan `webRequest` tidak berjalan. Kiwi, yang merupakan fork Chromium, bisa. Zenith tidak. |
+| Tab privat | Pada Android di bawah API 28, cookie tetap di profil WebView bersama. Yang privat: tidak dicatat ke riwayat, saran, atau penyimpanan aplikasi. |
+| `document-start` | Best-effort, beberapa milidetik setelah sinyal jembatan — bukan sebelum skrip pertama halaman. |
+| Pola URL | `*://`, `http(s)`, `*.host`, glob `*`, regex `/.../`. `file://` dan `.tld` tidak didukung. |
+| DNS | Uji resolusi dan panduan DoT. Bukan VPN, dan tidak melewati pemblokiran DPI/SNI. |
 
-## 🧪 Kualitas
+---
 
-- `cargo test` — **21/21 lulus** (pattern, userscript, extension manifest, adblock, urlkit, JNI JSON).
-- `tsc --noEmit` — 0 error.
-- `react-native bundle` (Hermes, release) — lulus.
+## Kredit
 
-## 🙏 Credit sumber
+Zenith berdiri di atas pekerjaan orang lain. Nama di bawah adalah atribusi, bukan klaim kepemilikan.
 
-Zenith berdiri di atas bahu tiga proyek open-source berikut — **semua kredit untuk para pembuatnya**:
-
-| Proyek sumber | Repo | Kontribusi pada Zenith |
+| | Dari | Yang diambil |
 | --- | --- | --- |
-| 🌙 **Zen Browser** (docs) | [github.com/zen-browser/docs](https://github.com/zen-browser/docs) | Konsep & desain UX: workspaces, compact mode, split view, glance, omnibox mengambang, pengelola mesin pencari |
-| ⚡ **Via Browser** | [github.com/tuyafeng/Via](https://github.com/tuyafeng/Via) | Format userscript (Greasy Fork), pengaturan per-situs, filosofi browser ringan tanpa iklan |
-| 🥝 **Kiwi Browser** (src.next) | [github.com/kiwibrowser/src.next](https://github.com/kiwibrowser/src.next) | Model dukungan ekstensi Chrome (parsing manifest MV2/MV3 + content scripts) |
-| 🦁 **Brave Browser** | [github.com/brave/brave-browser](https://github.com/brave/brave-browser) | Shields per-situs, penghitung blokir, upgrade HTTPS, Brave Search |
+| [Zen Browser](https://github.com/zen-browser/docs) | Dokumentasi UX | Workspace, mode kompak, split, Glance, omnibox mengambang, mesin pencari `%s` |
+| [Via Browser](https://github.com/tuyafeng/Via) | Yafeng Tu | Userscript Greasy Fork, pengaturan per situs, sikap ringan dan tanpa iklan |
+| [Kiwi Browser](https://github.com/kiwibrowser/src.next) | src.next | Model ekstensi Chrome: manifest MV2/MV3 dan content script |
+| [Brave](https://github.com/brave/brave-browser) | Shields | Perisai per situs, penghitung blokir, upgrade HTTPS, Brave Search |
 
-**Built with 🩷 [Pistis Litae](https://github.com/ahyat786)** — penggabungan ketiganya dalam Rust + React Native.
+Kode Zenith berlisensi **MIT** — lihat [LICENSE](./LICENSE). Zenith adalah proyek independen. Bukan produk resmi Zen, Via, Kiwi, atau Brave.
 
-- [Zen Browser docs](https://github.com/zen-browser/docs) — docs berlisensi repo masing-masing.
-- [Via Browser](https://github.com/tuyafeng/Via) © Yafeng Tu.
-- [Kiwi Browser src.next](https://github.com/kiwibrowser/src.next).
-- [Brave Browser](https://github.com/brave/brave-browser) — Shields & HTTPS-upgrade.
-- Kode Zenith: **MIT** (lihat [LICENSE](./LICENSE)).
+**Built with 🩷 [Pistis Litae](https://github.com/ahyat786).**
 
-Zenith adalah proyek independen dan bukan produk resmi Zen/Via/Kiwi.
+---
 
-## 🗺️ Roadmap
+## Peta jalan
 
-- [ ] Sinkronisasi pengaturan (opsional, end-to-end encrypted)
-- [ ] Panel konsol untuk debug skrip (log `zen:error`)
-- [ ] `@require` dukungan pustaka eksternal
+- [ ] Sinkronisasi pengaturan, opsional, terenkripsi ujung ke ujung
+- [ ] Panel log untuk `zen:error` saat menulis skrip
+- [ ] `@require` untuk pustaka eksternal
 - [ ] Isolasi profil WebView penuh untuk tab privat (API 28+)
-- [ ] Bookmark folder + impor/ekspor HTML
+- [ ] Folder bookmark, impor dan ekspor HTML

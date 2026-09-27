@@ -106,7 +106,15 @@ jobs:
       - name: Ganti nama APK
         run: |
           cd android/app/build/outputs/apk/release
-          mv app-release.apk "Zenith-${GITHUB_REF_NAME}-android.apk" 2>/dev/null || mv app-release.apk Zenith-android.apk
+          if [ -f app-release.apk ]; then
+            mv app-release.apk "Zenith-${GITHUB_REF_NAME}-android.apk"
+          fi
+          # Nama stabil untuk tombol unduh di README. Jangan diubah:
+          # https://github.com/ahyat786/Zenith-App/releases/latest/download/Zenith-android.apk
+          SRC=$(ls -1 Zenith-*.apk | grep -v '^Zenith-android\.apk$' | head -1)
+          if [ -n "$SRC" ]; then
+            cp "$SRC" Zenith-android.apk
+          fi
           ls -lh
 
       - name: Upload artifact APK
@@ -129,3 +137,5 @@ jobs:
             **Built with 🩷 Pistis Litae**
 
             Ditandatangani kunci rilis (GitHub Secrets) · Kompatibel: Android 7.0 (API 24) → Android 16/17 · 4 ABI (arm64-v8a, armeabi-v7a, x86, x86_64)
+
+            Unduh langsung rilis ini: `Zenith-android.apk` (nama stabil) dan `Zenith-${{ github.ref_name }}-android.apk`.
