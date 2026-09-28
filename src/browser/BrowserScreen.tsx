@@ -246,7 +246,8 @@ export function BrowserScreen() {
   const freshOpen = fullState.tabs.find(
     (t) => t.id === freshTabId() && t.profileId === state.activeProfileId && isNewTabUrl(t.url),
   );
-  const onNewTabPage = !!freshOpen || !activeTab || isNewTabUrl(activeTab?.url);
+  const freshOpenId = freshOpen ? freshOpen.id : null;
+  const onNewTabPage = freshOpenId != null || !activeTab || isNewTabUrl(activeTab?.url);
   // Tab baru dimuat sendiri dulu, supaya WebView tab lama tidak menempel.
   useEffect(() => {
     setSoloLoad(true);
@@ -324,7 +325,7 @@ export function BrowserScreen() {
   }, [state.ui.linkMenu?.url]);
 
   const renderTab = (tab: Tab, forceActive = false) => {
-    const shown = forceActive || tab.id === state.activeTabId || (onNewTabPage && freshOpen?.id === tab.id);
+    const shown = forceActive || tab.id === state.activeTabId || (onNewTabPage && freshOpenId === tab.id);
     if (isNewTabUrl(tab.url)) {
       return (
         <View key={tab.id} style={{ flex: 1, display: shown ? 'flex' : 'none', zIndex: shown ? 2 : 0 }}>
@@ -630,10 +631,10 @@ export function BrowserScreen() {
     const mine = fullState.tabs.filter((t) => t.profileId === pid);
     // Tab baru tidak boleh menampilkan WebView tab atau profil lain.
     if (onNewTabPage) {
-      return mine.filter((t) => isNewTabUrl(t.url) || t.id === freshOpen?.id);
+      return mine.filter((t) => isNewTabUrl(t.url) || t.id === freshOpenId);
     }
     if (soloLoad) {
-      return mine.filter((t) => t.id === state.activeTabId || t.id === freshOpen?.id);
+      return mine.filter((t) => t.id === state.activeTabId || t.id === freshOpenId);
     }
     const freshId = freshTabId();
     const must = mine.filter(
@@ -641,7 +642,7 @@ export function BrowserScreen() {
     );
     const rest = mine.filter((t) => !must.some((m) => m.id === t.id));
     return [...must, ...rest.slice(0, Math.max(0, 8 - must.length))];
-  }, [fullState.tabs, state.activeProfileId, state.activeWorkspaceId, state.activeTabId, onNewTabPage, soloLoad, freshOpen?.id]);
+  }, [fullState.tabs, state.activeProfileId, state.activeWorkspaceId, state.activeTabId, onNewTabPage, soloLoad, freshOpenId]);
 
   // ---------- panel SHIELD GUARD (Brave + log koneksi) ----------
   const shieldsSheet = (
