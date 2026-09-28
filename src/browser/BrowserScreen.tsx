@@ -30,7 +30,7 @@ import { GlanceView } from './GlanceView';
 import { FirefoxMenu } from './FirefoxMenu';
 import { NewTabPage } from './NewTabPage';
 import { getWebView } from './refs';
-import { consumeHardwareBack } from './backStack';
+import { consumeHardwareBack, noteBackHandled, wasBackJustHandled } from './backStack';
 import { NEW_TAB_URL, isNewTabUrl } from './newtab';
 import { freshTabId } from './navIntent';
 import { Icon } from '../ui/Icon';
@@ -154,60 +154,85 @@ export function BrowserScreen() {
     clearPrivateSession();
   }, [privateCount, state.hydrated]);
 
+  const backRef = useRef({
+    menuOpen,
+    shieldsOpen,
+    profilesOpen,
+    ui: state.ui,
+    tabId: activeTab?.id ?? null,
+    canGoBack: !!activeTab?.canGoBack,
+  });
+  backRef.current = {
+    menuOpen,
+    shieldsOpen,
+    profilesOpen,
+    ui: state.ui,
+    tabId: activeTab?.id ?? null,
+    canGoBack: !!activeTab?.canGoBack,
+  };
+
   // ---------- tombol fisik kembali ----------
-  // Menu, sheet, dan layar overlay ditutup dulu. Tab tidak pernah ditutup
-  // oleh tombol kembali — kalau tidak ada yang ditutup dan halaman tidak
-  // punya riwayat, Android yang keluar dari aktivitas. Daftar tab tetap.
+  // Menu dan layar yang dibuka dari Zenith ditutup dulu. Tab tidak pernah
+  // ditutup. Jika tidak ada yang ditutup, aktivitas tidak di-finish — aplikasi
+  // hanya pindah ke latar supaya akun dan tab tetap hidup.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (wasBackJustHandled()) {
+        return true;
+      }
       if (consumeHardwareBack()) {
         return true;
       }
-      if (menuOpen) {
+      const cur = backRef.current;
+      const close = () => {
+        noteBackHandled();
+        return true;
+      };
+      if (cur.menuOpen) {
         setMenuOpen(false);
-        return true;
+        return close();
       }
-      if (shieldsOpen) {
+      if (cur.shieldsOpen) {
         setShieldsOpen(false);
-        return true;
+        return close();
       }
-      if (profilesOpen) {
+      if (cur.profilesOpen) {
         setProfilesOpen(false);
-        return true;
+        return close();
       }
-      const ui = state.ui;
+      const ui = cur.ui;
       if (ui.omnibox.open) {
         dispatch({ type: 'SET_OMNIBOX', patch: { open: false } });
-        return true;
+        return close();
       }
       if (ui.glanceUrl) {
         dispatch({ type: 'SET_UI', patch: { glanceUrl: null } });
-        return true;
+        return close();
       }
       if (ui.tabSwitcher) {
         dispatch({ type: 'SET_UI', patch: { tabSwitcher: false } });
-        return true;
+        return close();
       }
       if (ui.linkMenu) {
         dispatch({ type: 'SET_UI', patch: { linkMenu: null } });
-        return true;
+        return close();
       }
       if (ui.compact) {
         dispatch({ type: 'SET_UI', patch: { compact: false } });
-        return true;
+        return close();
       }
       if (ui.screen !== 'browser') {
         dispatch({ type: 'SET_SCREEN', screen: 'browser' });
-        return true;
+        return close();
       }
-      if (activeTab?.canGoBack) {
-        getWebView(activeTab.id)?.goBack();
-        return true;
+      if (cur.canGoBack && cur.tabId) {
+        getWebView(cur.tabId)?.goBack();
+        return close();
       }
       return false;
     });
     return () => sub.remove();
-  }, [state.ui, activeTab, dispatch, menuOpen, shieldsOpen, profilesOpen]);
+  }, [dispatch]);
 
   // ---------- aksi ----------
   const openOmniboxNew = (incognito = false) =>
@@ -604,8 +629,11 @@ export function BrowserScreen() {
     const pid = state.activeProfileId;
     const mine = fullState.tabs.filter((t) => t.profileId === pid);
     // Tab baru tidak boleh menampilkan WebView tab atau profil lain.
-    if (onNewTabPage || soloLoad) {
-      return mine.filter((t) => t.id === state.activeTabId || t.id === freshOpen?.id || (onNewTabPage && isNewTabUrl(t.url)));
+    if (onNewTabPage) {
+      return mine.filter((t) => isNewTabUrl(t.url) || t.id === freshOpen?.id);
+    }
+    if (soloLoad) {
+      return mine.filter((t) => t.id === state.activeTabId || t.id === freshOpen?.id);
     }
     const freshId = freshTabId();
     const must = mine.filter(

@@ -4,4 +4,5 @@
     <include domain="database" path="." />
     <include domain="file" path="." />
     <include domain="root" path="app_webview" />
+    <include domain="root" path="app_webview_com.zenith.browser" />
 </full-backup-content>

@@ -9,11 +9,22 @@ import { useEffect } from 'react';
 type Handler = () => boolean;
 
 const stack: Handler[] = [];
+let handledAt = 0;
+
+/** Menu/sheet sudah menutup back ini. Jangan biarkan peristiwa kedua menutup aplikasi. */
+export function noteBackHandled(): void {
+  handledAt = Date.now();
+}
+
+export function wasBackJustHandled(windowMs = 700): boolean {
+  return Date.now() - handledAt < windowMs;
+}
 
 export function consumeHardwareBack(): boolean {
   for (let i = stack.length - 1; i >= 0; i--) {
     try {
       if (stack[i]()) {
+        noteBackHandled();
         return true;
       }
     } catch {

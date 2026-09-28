@@ -185,6 +185,31 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun snapshotCookies(urls: ReadableArray, promise: Promise) {
+        try {
+            val list = ArrayList<String>(urls.size())
+            for (i in 0 until urls.size()) {
+                if (!urls.isNull(i)) {
+                    urls.getString(i)?.let { list.add(it) }
+                }
+            }
+            com.zenith.browser.webview.ZenithPrivate.snapshotCookies(reactApplicationContext, list)
+            promise.resolve(true)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun restoreCookieSnapshot(promise: Promise) {
+        try {
+            promise.resolve(com.zenith.browser.webview.ZenithPrivate.restoreCookieSnapshot(reactApplicationContext))
+        } catch (_: Throwable) {
+            promise.resolve(0)
+        }
+    }
+
+    @ReactMethod
     fun flushCookies(promise: Promise) {
         com.zenith.browser.webview.ZenithPrivate.flush()
         promise.resolve(true)

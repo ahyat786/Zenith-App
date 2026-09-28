@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { noteBackHandled } from '../browser/backStack';
 import { Icon, type IconName } from './Icon';
 import { radius, spacing, type Theme } from '../theme';
 
@@ -387,7 +388,10 @@ export function Sheet({
   maxHeight?: number | string;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={() => {
+      noteBackHandled();
+      onClose();
+    }}>
       <Pressable
         style={{ flex: 1, backgroundColor: theme.overlay, justifyContent: 'flex-end' }}
         onPress={onClose}>

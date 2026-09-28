@@ -25,6 +25,7 @@ import { radius, spacing } from '../theme';
 import { fetchSuggestions, fuzzyScore } from '../core/suggest';
 import { getWebView } from './refs';
 import { isNewTabUrl } from './newtab';
+import { noteBackHandled } from './backStack';
 import { beginTabNavigation, commitNavigation, freshTabId, otherTabUrls } from './navIntent';
 import { Icon, type IconName } from '../ui/Icon';
 
@@ -55,6 +56,7 @@ export function Omnibox({ theme }: { theme: Theme }) {
   }, []);
 
   const close = () => {
+    noteBackHandled();
     Keyboard.dismiss();
     dispatch({ type: 'SET_OMNIBOX', patch: { open: false, initial: '', incognito: false } });
   };

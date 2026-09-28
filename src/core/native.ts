@@ -46,6 +46,8 @@ interface ZenithCoreNative {
   writeStateBackup(json: string): Promise<boolean>;
   flushCookies(): Promise<boolean>;
   restorePrimaryCookies(urls: string[]): Promise<boolean>;
+  snapshotCookies(urls: string[]): Promise<boolean>;
+  restoreCookieSnapshot(): Promise<number>;
 }
 
 const ZC = NativeModules.ZenithCore as ZenithCoreNative | undefined;
@@ -374,6 +376,25 @@ export async function writeStateBackup(json: string): Promise<void> {
     await ZC?.writeStateBackup(json);
   } catch {
     // cadangan berkas opsional
+  }
+}
+
+export async function snapshotCookies(urls: string[]): Promise<void> {
+  try {
+    if (urls.length === 0) {
+      return;
+    }
+    await ZC?.snapshotCookies(urls.slice(0, 400));
+  } catch {
+    // cadangan kuki opsional
+  }
+}
+
+export async function restoreCookieSnapshot(): Promise<void> {
+  try {
+    await ZC?.restoreCookieSnapshot();
+  } catch {
+    // berkas cadangan mungkin belum ada
   }
 }
 

@@ -27,7 +27,7 @@ import { NEW_TAB_URL, isNewTabUrl } from './newtab';
 import { WORKSPACE_ICONS, uid } from '../state/defaults';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, Button, TextField, type SheetAction } from '../ui/kit';
-import { useHardwareBack } from './backStack';
+import { noteBackHandled, useHardwareBack } from './backStack';
 
 const GROUP_COLORS = ['#8b7cf6', '#60a5fa', '#4ade80', '#fbbf24', '#f472b6', '#f87171'];
 
@@ -272,6 +272,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
       visible
       animationType="slide"
       onRequestClose={() => {
+        noteBackHandled();
         if (!closeNested()) {
           close();
         }

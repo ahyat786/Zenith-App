@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.zenith.browser.MainActivity
 
@@ -19,15 +20,44 @@ import com.zenith.browser.MainActivity
  */
 class ZenithSessionService : Service() {
 
+    private var wakeLock: PowerManager.WakeLock? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
             promote()
+            if (intent?.hasExtra(EXTRA_BACKGROUND) == true) {
+                setBackground(intent.getBooleanExtra(EXTRA_BACKGROUND, false))
+            }
             START_STICKY
         } catch (_: Throwable) {
             stopSelf()
             START_NOT_STICKY
+        }
+    }
+
+    override fun onDestroy() {
+        setBackground(false)
+        super.onDestroy()
+    }
+
+    private fun setBackground(background: Boolean) {
+        val lock = wakeLock ?: (getSystemService(POWER_SERVICE) as? PowerManager)
+            ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "zenith:session")
+            ?.also {
+                it.setReferenceCounted(false)
+                wakeLock = it
+            }
+        if (lock == null) {
+            return
+        }
+        if (background) {
+            if (!lock.isHeld) {
+                lock.acquire(6 * 60 * 60 * 1000L)
+            }
+        } else if (lock.isHeld) {
+            lock.release()
         }
     }
 
@@ -68,6 +98,24 @@ class ZenithSessionService : Service() {
     companion object {
         private const val CHANNEL_ID = "zenith-session"
         private const val NOTIF_ID = 4107
+        private const val EXTRA_BACKGROUND = "background"
+
+        fun setInBackground(context: Context, background: Boolean) {
+            val intent = Intent(context, ZenithSessionService::class.java)
+                .putExtra(EXTRA_BACKGROUND, background)
+            try {
+                if (Build.VERSION.SDK_INT >= 26) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (_: Throwable) {
+                try {
+                    context.startService(intent)
+                } catch (_: Throwable) {
+                }
+            }
+        }
 
         fun start(context: Context) {
             val intent = Intent(context, ZenithSessionService::class.java)

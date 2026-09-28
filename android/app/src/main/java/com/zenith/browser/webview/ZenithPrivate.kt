@@ -1,10 +1,13 @@
 package com.zenith.browser.webview
 
+import android.content.Context
 import android.os.Build
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
+import org.json.JSONObject
+import java.io.File
 import java.util.Collections
 import java.util.WeakHashMap
 
@@ -154,6 +157,106 @@ object ZenithPrivate {
         try {
             CookieManager.getInstance().flush()
         } catch (_: Throwable) {
+        }
+        try {
+            val cm = profileCookieManager(nameFor(PRIMARY_ID, false)) ?: return
+            cm.javaClass.methods.firstOrNull { it.name == "flush" && it.parameterTypes.isEmpty() }?.invoke(cm)
+        } catch (_: Throwable) {
+        }
+    }
+
+    /**
+     * Salinan kuki di filesDir. Bertahan saat toples WebView dikosongkan oleh
+     * update penyedia WebView, selama aplikasi tidak di-uninstall.
+     */
+    fun snapshotCookies(context: Context, urls: List<String>) {
+        val root = JSONObject()
+        val cm = CookieManager.getInstance()
+        val named = nameFor(PRIMARY_ID, false)
+        for (url in urls) {
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                continue
+            }
+            val global = try {
+                cm.getCookie(url)
+            } catch (_: Throwable) {
+                null
+            }
+            if (!global.isNullOrBlank()) {
+                root.put(url, global)
+            }
+            val zu = profileCookie(named, url)
+            if (!zu.isNullOrBlank()) {
+                root.put("zu:$url", zu)
+            }
+        }
+        val dir = context.filesDir
+        val file = File(dir, "zenith-cookies.json")
+        if (root.length() == 0 && file.exists() && file.length() > 2) {
+            return
+        }
+        val tmp = File(dir, "zenith-cookies.json.tmp")
+        val text = root.toString()
+        tmp.writeText(text, Charsets.UTF_8)
+        if (!tmp.renameTo(file)) {
+            file.writeText(text, Charsets.UTF_8)
+            tmp.delete()
+        }
+        flush()
+    }
+
+    /** Isi kuki yang hilang dari cadangan. Tidak menimpa sesi yang masih ada. */
+    fun restoreCookieSnapshot(context: Context): Int {
+        val file = File(context.filesDir, "zenith-cookies.json")
+        if (!file.exists()) {
+            return 0
+        }
+        val root = JSONObject(file.readText(Charsets.UTF_8))
+        val cm = CookieManager.getInstance()
+        try {
+            cm.setAcceptCookie(true)
+        } catch (_: Throwable) {
+        }
+        var filled = 0
+        val keys = root.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val url = if (key.startsWith("zu:")) key.removePrefix("zu:") else key
+            val raw = root.optString(key)
+            if (raw.isBlank() || (!url.startsWith("http://") && !url.startsWith("https://"))) {
+                continue
+            }
+            val already = try {
+                cm.getCookie(url)
+            } catch (_: Throwable) {
+                null
+            }
+            if (!already.isNullOrBlank()) {
+                continue
+            }
+            for (part in raw.split(';')) {
+                val cookie = part.trim()
+                if (!cookie.contains('=')) {
+                    continue
+                }
+                try {
+                    cm.setCookie(url, cookie)
+                    filled += 1
+                } catch (_: Throwable) {
+                }
+            }
+        }
+        flush()
+        return filled
+    }
+
+    private fun profileCookieManager(name: String): Any? {
+        return try {
+            val store = profileStore() ?: return null
+            val profile = store.javaClass.getMethod("getProfile", String::class.java).invoke(store, name) ?: return null
+            profile.javaClass.getMethod("getCookieManager").invoke(profile)
+        } catch (_: Throwable) {
+            null
         }
     }
 

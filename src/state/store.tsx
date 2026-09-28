@@ -40,7 +40,7 @@ import {
   uid,
   workspacesForProfile,
 } from './defaults';
-import { flushCookies, readStateBackup, restorePrimaryCookies, setActiveBrowserProfile, writeStateBackup } from '../core/native';
+import { flushCookies, readStateBackup, restoreCookieSnapshot, restorePrimaryCookies, setActiveBrowserProfile, snapshotCookies, writeStateBackup } from '../core/native';
 import { adblockAllowHost, adblockInit, adblockSetEnabled, expandSearch, normalizeInput } from '../core/native';
 import { setFastDownloadsEnabled } from '../core/downloads';
 import { isNewTabUrl } from '../browser/newtab';
@@ -791,6 +791,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           clearTimeout(saveTimer.current);
         }
         persistNow(stateRef.current);
+        const snap = stateRef.current;
+        const urls = new Set<string>();
+        for (const tab of snap.tabs) {
+          if (tab.url) {
+            urls.add(tab.url);
+          }
+        }
+        for (const item of snap.history) {
+          if (item.url) {
+            urls.add(item.url);
+          }
+        }
+        for (const item of snap.bookmarks) {
+          if (item.url) {
+            urls.add(item.url);
+          }
+        }
+        snapshotCookies([...urls]).catch(() => {});
         flushCookies().catch(() => {});
       }
     });
@@ -818,7 +836,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         urls.add(item.url);
       }
     }
-    restorePrimaryCookies([...urls]).catch(() => {});
+    restoreCookieSnapshot()
+      .catch(() => {})
+      .finally(() => {
+        restorePrimaryCookies([...urls]).catch(() => {});
+      });
   }, [state.hydrated, state.tabs, state.history, state.bookmarks]);
 
   // ---- sinkronisasi mesin adblock (Rust)

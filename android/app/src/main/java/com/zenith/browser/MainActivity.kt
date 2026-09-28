@@ -35,6 +35,26 @@ class MainActivity : ReactActivity() {
       CookieManager.getInstance().flush()
     } catch (_: Throwable) {
     }
+    try {
+      ZenithSessionService.setInBackground(this, true)
+    } catch (_: Throwable) {
+    }
+  }
+
+  override fun onDestroy() {
+    try {
+      CookieManager.getInstance().flush()
+    } catch (_: Throwable) {
+    }
+    super.onDestroy()
+  }
+
+  /**
+   * targetSdk 36 memakai predictive back. Jika JS tidak menangani, React
+   * memanggil ini dan finish() menutup Zenith. Pindahkan ke latar saja.
+   */
+  override fun invokeDefaultOnBackPressed() {
+    moveTaskToBack(true)
   }
 
   override fun onStart() {
@@ -60,6 +80,10 @@ class MainActivity : ReactActivity() {
   override fun onResume() {
     super.onResume()
     window?.decorView?.postDelayed({ askBatteryOnce() }, 1500)
+    try {
+      ZenithSessionService.setInBackground(this, false)
+    } catch (_: Throwable) {
+    }
     // Setelah lama di latar, timer dan permukaan WebView sering mati.
     // Tanpa onResume halaman tetap putih meski URL tab masih tersimpan.
     window?.decorView?.let { root ->

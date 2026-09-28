@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { useHardwareBack } from './backStack';
+import { noteBackHandled, useHardwareBack } from './backStack';
 import {
   Modal,
   Pressable,
@@ -97,6 +97,7 @@ export function FirefoxMenu(props: Props) {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={() => {
+      noteBackHandled();
       if (!closeNested()) {
         onClose();
       }
