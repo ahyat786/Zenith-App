@@ -8,7 +8,7 @@
  *     Pembungkus idempoten mencegah skrip berjalan dua kali.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { AppState, Linking, Text, View } from 'react-native';
 import { WebView as WebViewComponent, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
@@ -29,10 +29,11 @@ import {
   claimWebViewLoad,
   forceWebViewLoad,
   cancelBlankProbe,
+  guardNavigation,
+  navigationEpoch,
   noteBlankProbeResult,
   pendingNavigationUrl,
   probeBlankWebView,
-  shouldApplyNavUrl,
 } from './navIntent';
 import { isBlankWebUrl, isNewTabUrl } from './newtab';
 import { Button } from '../ui/kit';
@@ -45,8 +46,9 @@ interface Props {
 }
 
 export function TabView({ tab, active, theme }: Props) {
-  const { state, dispatch, siteConfigFor, openNewTab } = useStore();
-  const [sourceUrl, setSourceUrl] = useState(() => pendingNavigationUrl(tab.id) || tab.url);
+  const { state, fullState, dispatch, siteConfigFor, openNewTab } = useStore();
+  const pendingUrl = pendingNavigationUrl(tab.id);
+  const sourceUrl = pendingUrl || tab.url;
   const lastHistoryUrl = useRef<string>('');
   const injectGen = useRef(0);
   const mountedAt = useRef(Date.now());
@@ -62,9 +64,8 @@ export function TabView({ tab, active, theme }: Props) {
     (ref: any) => {
       if (ref) {
         webviewRefs.set(tab.id, ref);
-        const locked = claimWebViewLoad(tab.id);
+        const locked = claimWebViewLoad(tab.id) || pendingNavigationUrl(tab.id);
         if (locked) {
-          setSourceUrl((cur) => (cur === locked ? cur : locked));
           forceWebViewLoad(ref, locked);
           // Satu putaran kemudian: native view kadang belum siap di callback ref.
           setTimeout(() => {
@@ -80,20 +81,12 @@ export function TabView({ tab, active, theme }: Props) {
     [tab.id],
   );
 
+  const foreignUrls = fullState.tabs
+    .filter((t) => t.id !== tab.id && t.url && !isNewTabUrl(t.url))
+    .map((t) => t.url);
+
   // URL yang diketik dari tab baru / omnibox harus dimuat, bukan hanya disimpan.
   useEffect(() => {
-    const pending = pendingNavigationUrl(tab.id);
-    if (pending && pending !== sourceUrl) {
-      setSourceUrl(pending);
-    } else if (
-      !pending &&
-      tab.url &&
-      !isNewTabUrl(tab.url) &&
-      tab.url !== sourceUrl &&
-      (!sourceUrl || isBlankWebUrl(sourceUrl))
-    ) {
-      setSourceUrl(tab.url);
-    }
     const wv = webviewRefs.get(tab.id);
     if (!wv) {
       return;
@@ -207,12 +200,12 @@ export function TabView({ tab, active, theme }: Props) {
         case 'zen:docidle':
           injectPhase('idle', msg.url || sourceUrl);
           break;
-        case 'zen:health':
-          noteBlankProbeResult(tab.id, String(msg.token || ''), !!msg.dead, tab.url);
-          break;
+      case 'zen:health':
+        noteBlankProbeResult(tab.id, String(msg.token || ''), !!msg.dead, String(msg.href || ''), tab.url);
+        break;
         case 'zen:urlchange': {
           const url = String(msg.url || '');
-          if (!url || isBlankWebUrl(url) || !shouldApplyNavUrl(tab.id, url)) {
+          if (!url || isBlankWebUrl(url) || !guardNavigation(tab.id, url, tab.url, foreignUrls)) {
             break;
           }
           if (/^https?:/i.test(tab.url) && !/^https?:/i.test(url)) {
@@ -252,13 +245,13 @@ export function TabView({ tab, active, theme }: Props) {
           break;
       }
     },
-    [tab.id, tab.url, sourceUrl, injectPhase, dispatch, shieldOn],
+    [tab.id, tab.url, sourceUrl, injectPhase, dispatch, shieldOn, foreignUrls],
   );
 
   // ---------------- navigasi ----------------
   const onNavigationStateChange = useCallback(
     (nav: WebViewNavigation) => {
-      if (!nav.url || isBlankWebUrl(nav.url) || !shouldApplyNavUrl(tab.id, nav.url)) {
+      if (!nav.url || isBlankWebUrl(nav.url) || !guardNavigation(tab.id, nav.url, tab.url, foreignUrls)) {
         return;
       }
       if (/^https?:/i.test(nav.url)) {
@@ -296,7 +289,7 @@ export function TabView({ tab, active, theme }: Props) {
         });
       }
     },
-    [tab.id, tab.url, tab.title, tab.canGoBack, tab.canGoForward, tab.loading, tab.incognito, dispatch],
+    [tab.id, tab.url, tab.title, tab.canGoBack, tab.canGoForward, tab.loading, tab.incognito, dispatch, foreignUrls],
   );
 
   const upgradedRef = useRef<Set<string>>(new Set());
@@ -354,6 +347,7 @@ export function TabView({ tab, active, theme }: Props) {
   return (
     <View style={{ flex: 1, display: active ? 'flex' : 'none', zIndex: active ? 2 : 0 }}>
       <Wv
+        key={`${navigationEpoch(tab.id)}`}
         ref={setRef}
         source={{ uri: sourceUrl }}
         style={{ flex: 1, backgroundColor: theme.bg }}
@@ -417,7 +411,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent={`Zenith/0.4.6 zp:${tab.profileId || 'profile-utama'}`}
+        applicationNameForUserAgent={`Zenith/0.4.7 zp:${tab.profileId || 'profile-utama'}`}
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

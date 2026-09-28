@@ -1,6 +1,12 @@
 package com.zenith.browser
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -10,8 +16,11 @@ import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
+import com.zenith.browser.session.ZenithSessionService
 
 class MainActivity : ReactActivity() {
+
+  private var askedNotify = false
 
   /**
    * Returns the name of the main component registered from JavaScript. This is used to schedule
@@ -28,8 +37,29 @@ class MainActivity : ReactActivity() {
     }
   }
 
+  override fun onStart() {
+    super.onStart()
+    try {
+      if (
+        !askedNotify &&
+        Build.VERSION.SDK_INT >= 33 &&
+        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+        android.content.pm.PackageManager.PERMISSION_GRANTED
+      ) {
+        askedNotify = true
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4105)
+      }
+    } catch (_: Throwable) {
+    }
+    try {
+      ZenithSessionService.start(this)
+    } catch (_: Throwable) {
+    }
+  }
+
   override fun onResume() {
     super.onResume()
+    window?.decorView?.postDelayed({ askBatteryOnce() }, 1500)
     // Setelah lama di latar, timer dan permukaan WebView sering mati.
     // Tanpa onResume halaman tetap putih meski URL tab masih tersimpan.
     window?.decorView?.let { root ->
@@ -41,6 +71,30 @@ class MainActivity : ReactActivity() {
         } catch (_: Throwable) {
         }
       }
+    }
+  }
+
+  private fun askBatteryOnce() {
+    if (Build.VERSION.SDK_INT < 23) {
+      return
+    }
+    val prefs = getSharedPreferences("zenith", MODE_PRIVATE)
+    if (prefs.getBoolean("asked_battery", false)) {
+      return
+    }
+    prefs.edit().putBoolean("asked_battery", true).apply()
+    val pm = getSystemService(POWER_SERVICE) as? PowerManager ?: return
+    if (pm.isIgnoringBatteryOptimizations(packageName)) {
+      return
+    }
+    try {
+      startActivity(
+        Intent(
+          Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+          Uri.parse("package:$packageName"),
+        ),
+      )
+    } catch (_: Throwable) {
     }
   }
 

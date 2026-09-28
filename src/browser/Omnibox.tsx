@@ -85,14 +85,14 @@ export function Omnibox({ theme }: { theme: Theme }) {
       return;
     }
     const snappedFresh = freshTab && isNewTabUrl(freshTab.url) ? freshTab : null;
-    let target = activeNow;
+    // Tab baru selalu menang. Jangan kirim pencarian ke tab yang tadi terbuka.
+    let target = snappedFresh;
     if (omnibox.mode === 'new') {
       target = null;
-    } else if (activeNow && isNewTabUrl(activeNow.url)) {
+    } else if (!target && activeNow && isNewTabUrl(activeNow.url)) {
       target = activeNow;
-    } else if (snappedFresh) {
-      // Tab baru baru saja dibuka, lalu workspace mengembalikan tab lama.
-      target = snappedFresh;
+    } else if (!target) {
+      target = activeNow;
     }
     if (!target) {
       const id = openNewTab(url, { incognito: omnibox.incognito || !!activeNow?.incognito });

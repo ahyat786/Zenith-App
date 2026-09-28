@@ -57,14 +57,7 @@ export function BrowserScreen() {
   const [download, setDownload] = useState<DownloadJob | null>(null);
   const [connLog, setConnLog] = useState<ConnLogEntry[]>([]);
   const [profilesOpen, setProfilesOpen] = useState(false);
-  const [profilePair, setProfilePair] = useState<{ current: string; warm: string | null }>({
-    current: state.activeProfileId,
-    warm: null,
-  });
-  if (profilePair.current !== state.activeProfileId) {
-    setProfilePair({ current: state.activeProfileId, warm: profilePair.current });
-  }
-  const warmProfileId = profilePair.warm;
+  const [soloLoad, setSoloLoad] = useState(true);
 
   const wsTabs = tabsInWorkspace(state.activeWorkspaceId);
   const splitIds = state.splitTabIds;
@@ -225,14 +218,23 @@ export function BrowserScreen() {
       ToastAndroid.show('Mode privat — riwayat tidak disimpan', ToastAndroid.SHORT);
     }
   };
-  const onNewTabPage = !activeTab || isNewTabUrl(activeTab.url);
+  const freshOpen = fullState.tabs.find(
+    (t) => t.id === freshTabId() && t.profileId === state.activeProfileId && isNewTabUrl(t.url),
+  );
+  const onNewTabPage = !!freshOpen || !activeTab || isNewTabUrl(activeTab?.url);
+  // Tab baru dimuat sendiri dulu, supaya WebView tab lama tidak menempel.
+  useEffect(() => {
+    setSoloLoad(true);
+    const t = setTimeout(() => setSoloLoad(false), 800);
+    return () => clearTimeout(t);
+  }, [state.activeProfileId, onNewTabPage]);
   const openOmniboxEdit = () =>
     dispatch({
       type: 'SET_OMNIBOX',
       patch: {
         open: true,
         mode: 'edit',
-        initial: activeTab && !isNewTabUrl(activeTab.url) ? activeTab.url : '',
+        initial: onNewTabPage || !activeTab || isNewTabUrl(activeTab.url) ? '' : activeTab.url,
         incognito: !!activeTab?.incognito,
       },
     });
@@ -297,7 +299,7 @@ export function BrowserScreen() {
   }, [state.ui.linkMenu?.url]);
 
   const renderTab = (tab: Tab, forceActive = false) => {
-    const shown = forceActive || tab.id === state.activeTabId;
+    const shown = forceActive || tab.id === state.activeTabId || (onNewTabPage && freshOpen?.id === tab.id);
     if (isNewTabUrl(tab.url)) {
       return (
         <View key={tab.id} style={{ flex: 1, display: shown ? 'flex' : 'none', zIndex: shown ? 2 : 0 }}>
@@ -599,19 +601,19 @@ export function BrowserScreen() {
   const empty = state.tabs.length === 0;
   const wsEmptyButTabsExist = !empty && wsTabs.length === 0;
   const mountTabs = useMemo(() => {
+    const pid = state.activeProfileId;
+    const mine = fullState.tabs.filter((t) => t.profileId === pid);
+    // Tab baru tidak boleh menampilkan WebView tab atau profil lain.
+    if (onNewTabPage || soloLoad) {
+      return mine.filter((t) => t.id === state.activeTabId || t.id === freshOpen?.id || (onNewTabPage && isNewTabUrl(t.url)));
+    }
     const freshId = freshTabId();
-    const must = fullState.tabs.filter(
-      (t) =>
-        t.profileId === state.activeProfileId &&
-        (t.workspaceId === state.activeWorkspaceId || t.id === state.activeTabId || t.id === freshId),
+    const must = mine.filter(
+      (t) => t.workspaceId === state.activeWorkspaceId || t.id === state.activeTabId || t.id === freshId,
     );
-    const rest = fullState.tabs.filter(
-      (t) =>
-        (t.profileId === state.activeProfileId || t.profileId === warmProfileId) &&
-        !must.some((m) => m.id === t.id),
-    );
-    return [...must, ...rest.slice(0, Math.max(0, 12 - must.length))];
-  }, [fullState.tabs, state.activeProfileId, state.activeWorkspaceId, state.activeTabId, warmProfileId]);
+    const rest = mine.filter((t) => !must.some((m) => m.id === t.id));
+    return [...must, ...rest.slice(0, Math.max(0, 8 - must.length))];
+  }, [fullState.tabs, state.activeProfileId, state.activeWorkspaceId, state.activeTabId, onNewTabPage, soloLoad, freshOpen?.id]);
 
   // ---------- panel SHIELD GUARD (Brave + log koneksi) ----------
   const shieldsSheet = (
@@ -783,7 +785,7 @@ export function BrowserScreen() {
       {barTop ? bars : null}
 
       {/* ---------- konten ---------- */}
-      <View style={{ flex: 1, overflow: 'hidden' }}>
+      <View key={state.activeProfileId} style={{ flex: 1, overflow: 'hidden', backgroundColor: theme.bg }}>
         {mountTabs
           .filter((t) => !(splitActive && splitIds.includes(t.id)))
           .map((t) => renderTab(t))}

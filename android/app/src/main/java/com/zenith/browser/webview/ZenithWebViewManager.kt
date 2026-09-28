@@ -42,7 +42,7 @@ class ZenithWebViewManager : RNCWebViewManager() {
         if (idx >= 0) {
             ZenithPrivate.noteProfile(view.webView, raw.substring(idx + marker.length).trim())
             val ua = raw.substring(0, idx).trim()
-            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.4.6" else ua)
+            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.4.7" else ua)
         } else {
             super.setApplicationNameForUserAgent(view, value)
         }
@@ -68,6 +68,26 @@ class ZenithWebViewManager : RNCWebViewManager() {
 
     private fun loadSource(view: RNCWebViewWrapper, source: ReadableMap?) {
         super.setNewSource(view, source)
+        val uri = try {
+            if (source != null && source.hasKey("uri")) source.getString("uri") else null
+        } catch (_: Throwable) {
+            null
+        } ?: return
+        if (uri.isBlank() || uri == "about:blank" || uri.startsWith("zenith:")) {
+            return
+        }
+        val current = try {
+            view.webView.url
+        } catch (_: Throwable) {
+            null
+        }
+        // WebView daur ulang bisa tetap di URL tab sebelumnya meski source baru berbeda.
+        if (!current.isNullOrBlank() && current != uri) {
+            try {
+                view.webView.loadUrl(uri)
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     override fun addEventEmitters(reactContext: ThemedReactContext, view: RNCWebViewWrapper) {

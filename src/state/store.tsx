@@ -424,7 +424,9 @@ function reducer(state: AppState, action: Action): AppState {
       // Jangan jatuhkan tab yang baru diaktifkan ke tab pertama workspace.
       const inWs = (t: Tab) =>
         t.workspaceId === action.id && t.profileId === state.activeProfileId;
+      const fresh = freshTabId();
       const pinned =
+        (fresh ? state.tabs.find((t) => t.id === fresh && inWs(t)) : null) ??
         (action.tabId ? state.tabs.find((t) => t.id === action.tabId && inWs(t)) : null) ??
         state.tabs.find((t) => t.id === state.activeTabId && inWs(t)) ??
         null;

@@ -8,7 +8,7 @@
 
 import type { Tab } from '../types';
 import { getWebView } from './refs';
-import { isNewTabUrl } from './newtab';
+import { isBlankWebUrl, isNewTabUrl } from './newtab';
 
 const probes = new Map<string, { token: string; timer: ReturnType<typeof setTimeout> }>();
 
@@ -57,16 +57,88 @@ export function probeBlankWebView(tabId: string, expectedUrl: string): void {
   }
 }
 
-export function noteBlankProbeResult(tabId: string, token: string, dead: boolean, expectedUrl: string): void {
+export function noteBlankProbeResult(
+  tabId: string,
+  token: string,
+  dead: boolean,
+  href: string,
+  expectedUrl: string,
+): void {
   const probe = probes.get(tabId);
   if (!probe || probe.token !== token) {
     return;
   }
   clearTimeout(probe.timer);
   probes.delete(tabId);
-  if (dead) {
+  const foreign =
+    !!href &&
+    !isNewTabUrl(href) &&
+    !sameUrl(href, expectedUrl) &&
+    hostOf(href) !== hostOf(expectedUrl);
+  if ((dead || foreign) && expectedUrl && !isNewTabUrl(expectedUrl)) {
     forceWebViewLoad(getWebView(tabId), expectedUrl);
   }
+}
+
+const epochs = new Map<string, number>();
+const ownedLoads = new Set<string>();
+const foreignReloads = new Map<string, number>();
+
+function reloadExpected(tabId: string, expected: string): void {
+  if (!expected || isNewTabUrl(expected) || !/^https?:/i.test(expected)) {
+    return;
+  }
+  const n = (foreignReloads.get(tabId) ?? 0) + 1;
+  foreignReloads.set(tabId, n);
+  if (n > 4) {
+    return;
+  }
+  forceWebViewLoad(getWebView(tabId), expected);
+}
+
+/**
+ * true = URL ini milik tab ini dan boleh disimpan.
+ * Halaman tab lain yang menempel di WebView daur ulang tidak pernah disalin.
+ */
+export function guardNavigation(
+  tabId: string,
+  navUrl: string,
+  expectedUrl: string,
+  foreignUrls: string[],
+): boolean {
+  const expected = pendingNavigationUrl(tabId) || expectedUrl;
+  if (!shouldApplyNavUrl(tabId, navUrl)) {
+    if (
+      expected &&
+      !isNewTabUrl(expected) &&
+      navUrl &&
+      !isBlankWebUrl(navUrl) &&
+      !sameUrl(navUrl, expected) &&
+      hostOf(navUrl) !== hostOf(expected)
+    ) {
+      reloadExpected(tabId, expected);
+    }
+    return false;
+  }
+  if (ownedLoads.has(tabId)) {
+    return true;
+  }
+  const foreign =
+    !!navUrl &&
+    foreignUrls.some((u) => sameUrl(u, navUrl)) &&
+    !!expected &&
+    !sameUrl(navUrl, expected);
+  if (foreign) {
+    reloadExpected(tabId, expected);
+    return false;
+  }
+  ownedLoads.add(tabId);
+  foreignReloads.delete(tabId);
+  return true;
+}
+
+export function navigationEpoch(tabId: string): number {
+  return epochs.get(tabId) ?? 0;
 }
 
 interface Intent {
@@ -147,6 +219,9 @@ export function commitNavigation(
   previous: string | null,
   blocked: string[] = [],
 ): void {
+  epochs.set(tabId, (epochs.get(tabId) ?? 0) + 1);
+  ownedLoads.delete(tabId);
+  foreignReloads.delete(tabId);
   intents.set(tabId, {
     url,
     previous: previous && !isNewTabUrl(previous) ? previous : null,
@@ -174,24 +249,24 @@ export function shouldApplyNavUrl(tabId: string, navUrl: string): boolean {
   if (!navUrl || navUrl === 'about:blank' || isNewTabUrl(navUrl)) {
     return false;
   }
-  if (Date.now() - intent.at > 8000) {
-    intents.delete(tabId);
-    return !matchesBlocked(intent, navUrl);
+  // URL tab lain tidak pernah boleh menimpa pencarian yang baru diketik.
+  if (matchesBlocked(intent, navUrl)) {
+    return false;
   }
   if (sameUrl(navUrl, intent.url)) {
     intents.delete(tabId);
     return true;
   }
-  if (matchesBlocked(intent, navUrl)) {
-    return false;
-  }
   if (!intent.started) {
     return false;
   }
-  const startedFor = Date.now() - (intent.startedAt || intent.at);
-  if (hostOf(navUrl) === hostOf(intent.url) || startedFor > 1500) {
+  // Hanya ikuti pengalihan di situs yang sama dengan yang diketik, bukan situs tab lama.
+  if (hostOf(navUrl) && hostOf(navUrl) === hostOf(intent.url)) {
     intents.delete(tabId);
     return true;
+  }
+  if (Date.now() - intent.at > 12000) {
+    intents.delete(tabId);
   }
   return false;
 }
@@ -232,7 +307,7 @@ export function forceWebViewLoad(wv: any, url: string): void {
 
 export function beginTabNavigation(
   dispatch: (action: any) => void,
-  tab: Pick<Tab, 'id' | 'url'>,
+  tab: Pick<Tab, 'id' | 'url' | 'workspaceId'>,
   url: string,
   blocked: string[],
   activeTabId: string | null,
@@ -249,9 +324,10 @@ export function beginTabNavigation(
     patch.canGoForward = false;
   }
   dispatch({ type: 'UPDATE_TAB', id: tab.id, patch });
-  if (activeTabId !== tab.id) {
-    dispatch({ type: 'SET_ACTIVE_TAB', id: tab.id });
+  if (tab.workspaceId) {
+    dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: tab.workspaceId, tabId: tab.id });
   }
+  dispatch({ type: 'SET_ACTIVE_TAB', id: tab.id });
   clearFreshTab(tab.id);
   const wv = getWebView(tab.id);
   if (wv) {
