@@ -716,10 +716,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
     const { ui, hydrated, splitTabIds, ...persist } = snapshot;
     const text = JSON.stringify(persist);
-    AsyncStorage.multiSet([
-      [STATE_KEY, text],
-      [BACKUP_KEY, text],
-    ]).catch(() => {});
+    // async-storage v3: setMany, bukan multiSet.
+    AsyncStorage.setMany({
+      [STATE_KEY]: text,
+      [BACKUP_KEY]: text,
+    }).catch(() => {});
     writeStateBackup(text).catch(() => {});
   }, []);
 
@@ -731,9 +732,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       let backupRaw: string | null = null;
       let fileRaw: string | null = null;
       try {
-        const pair = await AsyncStorage.multiGet([STATE_KEY, BACKUP_KEY]);
-        raw = pair[0]?.[1] ?? null;
-        backupRaw = pair[1]?.[1] ?? null;
+        const pair = await AsyncStorage.getMany([STATE_KEY, BACKUP_KEY]);
+        raw = pair[STATE_KEY] ?? null;
+        backupRaw = pair[BACKUP_KEY] ?? null;
       } catch {
         raw = null;
         backupRaw = null;
