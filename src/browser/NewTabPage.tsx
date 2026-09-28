@@ -5,13 +5,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { hostOfUrl, useStore } from '../state/store';
+import { getAppState, hostOfUrl, useStore } from '../state/store';
 import type { Theme } from '../theme';
 import { radius, spacing } from '../theme';
 import type { Tab } from '../types';
 import { Icon } from '../ui/Icon';
 import { privateProfileSupported } from '../core/native';
 import { isNewTabUrl } from './newtab';
+import { beginTabNavigation, commitNavigation, otherTabUrls } from './navIntent';
 
 const DEFAULTS = [
   { label: 'Google', url: 'https://www.google.com' },
@@ -35,15 +36,13 @@ export function NewTabPage({ theme, tab }: { theme: Theme; tab?: Tab | null }) {
   }, [privateTab]);
 
   const go = (url: string) => {
+    const latest = getAppState();
     if (tab && isNewTabUrl(tab.url)) {
-      dispatch({
-        type: 'UPDATE_TAB',
-        id: tab.id,
-        patch: { url, title: '', loading: true, progress: 0.08 },
-      });
+      beginTabNavigation(dispatch, tab, url, otherTabUrls(latest.tabs, tab.id, url), latest.activeTabId);
       return;
     }
-    openNewTab(url, { incognito: privateTab });
+    const id = openNewTab(url, { incognito: privateTab });
+    commitNavigation(id, url, null, otherTabUrls(latest.tabs, id, url));
   };
 
   const openSearch = () =>

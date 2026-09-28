@@ -19,12 +19,13 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStore } from '../state/store';
+import { getAppState, profileTabs, useStore } from '../state/store';
 import type { Theme } from '../theme';
 import { radius, spacing } from '../theme';
 import { fetchSuggestions, fuzzyScore } from '../core/suggest';
 import { getWebView } from './refs';
 import { isNewTabUrl } from './newtab';
+import { beginTabNavigation, commitNavigation, freshTabId, otherTabUrls } from './navIntent';
 import { Icon, type IconName } from '../ui/Icon';
 
 interface SuggestionRow {
@@ -65,32 +66,39 @@ export function Omnibox({ theme }: { theme: Theme }) {
       return;
     }
     const { url, isSearch } = await resolveInput(q);
-    if (remember && isSearch && !omnibox.incognito && !activeTab?.incognito) {
+    // Setelah await, tab aktif bisa sudah bergeser. Baca state terbaru.
+    const latest = getAppState();
+    const tabs = profileTabs(latest);
+    const activeNow = tabs.find((t) => t.id === latest.activeTabId) ?? null;
+    const fresh = freshTabId();
+    const freshTab = fresh ? tabs.find((t) => t.id === fresh) ?? null : null;
+    if (remember && isSearch && !omnibox.incognito && !activeNow?.incognito && !freshTab?.incognito) {
       dispatch({ type: 'ADD_RECENT_SEARCH', query: q });
     }
     if (!url) {
       close();
       return;
     }
-    if (activeTab && isNewTabUrl(activeTab.url) && omnibox.mode !== 'new') {
-      dispatch({
-        type: 'UPDATE_TAB',
-        id: activeTab.id,
-        patch: { url, title: '', loading: true, progress: 0.08 },
-      });
-    } else if (omnibox.mode === 'new' || !activeTab) {
-      openNewTab(url, { incognito: omnibox.incognito });
-    } else {
-      const wv = getWebView(activeTab.id);
-      if (wv && url !== activeTab.url) {
-        wv.injectJavaScript(`location.href=${JSON.stringify(url)};true;`);
-      } else if (!wv) {
-        dispatch({
-          type: 'UPDATE_TAB',
-          id: activeTab.id,
-          patch: { url, title: '', loading: true, progress: 0.08 },
-        });
-      }
+    if (url.startsWith('javascript:')) {
+      getWebView(activeNow?.id)?.injectJavaScript(`${url};true;`);
+      close();
+      return;
+    }
+    const snappedFresh = freshTab && isNewTabUrl(freshTab.url) ? freshTab : null;
+    let target = activeNow;
+    if (omnibox.mode === 'new') {
+      target = null;
+    } else if (activeNow && isNewTabUrl(activeNow.url)) {
+      target = activeNow;
+    } else if (snappedFresh) {
+      // Tab baru baru saja dibuka, lalu workspace mengembalikan tab lama.
+      target = snappedFresh;
+    }
+    if (!target) {
+      const id = openNewTab(url, { incognito: omnibox.incognito || !!activeNow?.incognito });
+      commitNavigation(id, url, null, otherTabUrls(latest.tabs, id, url));
+    } else if (isNewTabUrl(target.url) || url !== target.url) {
+      beginTabNavigation(dispatch, target, url, otherTabUrls(latest.tabs, target.id, url), latest.activeTabId);
     }
     close();
   };
@@ -193,7 +201,7 @@ export function Omnibox({ theme }: { theme: Theme }) {
             title: t.t.title || t.t.url,
             subtitle: 'Tab terbuka — ketuk untuk pindah',
             onPress: () => {
-              dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: t.t.workspaceId });
+              dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: t.t.workspaceId, tabId: t.t.id });
               dispatch({ type: 'SET_ACTIVE_TAB', id: t.t.id });
               close();
             },
@@ -353,9 +361,11 @@ export function Omnibox({ theme }: { theme: Theme }) {
             marginBottom: 2,
             marginHorizontal: 14,
           }}>
-          {omnibox.mode === 'new' || !activeTab
-            ? `Enter → buka di tab baru${omnibox.incognito ? ' (privat)' : ''}`
-            : `Enter → navigasi di tab ini${activeTab.title ? '' : ''}`}
+          {activeTab && isNewTabUrl(activeTab.url)
+            ? 'Enter → buka di tab baru ini'
+            : omnibox.mode === 'new' || !activeTab
+              ? `Enter → buka di tab baru${omnibox.incognito ? ' (privat)' : ''}`
+              : 'Enter → navigasi di tab ini'}
         </Text>
 
         {/* daftar saran */}

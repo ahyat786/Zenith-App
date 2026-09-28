@@ -98,7 +98,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
   const ctxGroupObj = groups.find((g) => g.id === ctxGroup) ?? null;
 
   const selectTab = (t: Tab) => {
-    dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: t.workspaceId });
+    dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: t.workspaceId, tabId: t.id });
     dispatch({ type: 'SET_ACTIVE_TAB', id: t.id });
     close();
   };

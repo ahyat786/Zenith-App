@@ -43,6 +43,8 @@ import {
 import { flushCookies, readStateBackup, restorePrimaryCookies, setActiveBrowserProfile, writeStateBackup } from '../core/native';
 import { adblockAllowHost, adblockInit, adblockSetEnabled, expandSearch, normalizeInput } from '../core/native';
 import { setFastDownloadsEnabled } from '../core/downloads';
+import { isNewTabUrl } from '../browser/newtab';
+import { clearFreshTab, freshTabId, noteFreshTab } from '../browser/navIntent';
 
 const STATE_KEY = 'zenith.state.v1';
 const BACKUP_KEY = 'zenith.state.backup.v1';
@@ -127,6 +129,17 @@ const initialState: AppState = {
   ui: initialUi,
 };
 
+let latestState: AppState = initialState;
+
+export function getAppState(): AppState {
+  return latestState;
+}
+
+export function profileTabs(state: AppState = latestState): Tab[] {
+  const pid = state.activeProfileId || DEFAULT_PROFILE_ID;
+  return state.tabs.filter((t) => (t.profileId || DEFAULT_PROFILE_ID) === pid);
+}
+
 function siteKey(profileId: string, host: string): string {
   return `${profileId}::${host}`;
 }
@@ -176,7 +189,7 @@ type Action =
   | { type: 'UPDATE_GROUP'; id: string; patch: Partial<TabGroup> }
   | { type: 'DEL_GROUP'; id: string }
   | { type: 'SET_TAB_GROUP'; tabId: string; groupId: string | null }
-  | { type: 'SET_ACTIVE_WORKSPACE'; id: string }
+  | { type: 'SET_ACTIVE_WORKSPACE'; id: string; tabId?: string }
   | { type: 'ADD_WORKSPACE'; id: string; name: string; icon: string }
   | { type: 'UPDATE_WORKSPACE'; id: string; patch: Partial<Workspace> }
   | { type: 'DEL_WORKSPACE'; id: string }
@@ -287,6 +300,9 @@ function reducer(state: AppState, action: Action): AppState {
         // diabaikan
       }
       const activate = action.activate !== false;
+      if (activate && action.id !== freshTabId()) {
+        clearFreshTab();
+      }
       const tab: Tab = {
         id: action.id,
         url: action.url,
@@ -307,10 +323,14 @@ function reducer(state: AppState, action: Action): AppState {
         tabs: [...state.tabs, tab],
         activeTabId: activate ? tab.id : state.activeTabId,
         activeWorkspaceId: activate ? tab.workspaceId : state.activeWorkspaceId,
+        splitTabIds: activate ? [] : state.splitTabIds,
         ui: { ...state.ui, tabSwitcher: false },
       };
     }
     case 'CLOSE_TAB': {
+      if (action.id === freshTabId()) {
+        clearFreshTab();
+      }
       const idx = state.tabs.findIndex((t) => t.id === action.id);
       if (idx < 0) {
         return state;
@@ -339,12 +359,16 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, tabs, activeTabId: keep.id };
     }
     case 'CLOSE_ALL_TABS':
+      clearFreshTab();
       return {
         ...state,
         tabs: state.tabs.filter((t) => t.profileId !== state.activeProfileId),
         activeTabId: null,
       };
     case 'SET_ACTIVE_TAB':
+      if (action.id !== freshTabId()) {
+        clearFreshTab();
+      }
       return {
         ...state,
         activeTabId: action.id,
@@ -397,12 +421,22 @@ function reducer(state: AppState, action: Action): AppState {
         ),
       };
     case 'SET_ACTIVE_WORKSPACE': {
-      const first =
-        state.tabs.find((t) => t.workspaceId === action.id && t.profileId === state.activeProfileId) ?? null;
+      // Jangan jatuhkan tab yang baru diaktifkan ke tab pertama workspace.
+      const inWs = (t: Tab) =>
+        t.workspaceId === action.id && t.profileId === state.activeProfileId;
+      const pinned =
+        (action.tabId ? state.tabs.find((t) => t.id === action.tabId && inWs(t)) : null) ??
+        state.tabs.find((t) => t.id === state.activeTabId && inWs(t)) ??
+        null;
+      const first = state.tabs.find(inWs) ?? null;
+      const next = pinned ?? first;
+      if (!next || next.id !== freshTabId()) {
+        clearFreshTab();
+      }
       return {
         ...state,
         activeWorkspaceId: action.id,
-        activeTabId: first ? first.id : null,
+        activeTabId: next ? next.id : null,
       };
     }
     case 'ADD_WORKSPACE':
@@ -613,6 +647,7 @@ function reducer(state: AppState, action: Action): AppState {
       if (!state.profiles.some((p) => p.id === action.id) || action.id === state.activeProfileId) {
         return state;
       }
+      clearFreshTab();
       const profileFocus = {
         ...state.profileFocus,
         [state.activeProfileId]: {
@@ -668,6 +703,7 @@ const StoreContext = createContext<StoreApi | null>(null);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  latestState = state;
   const stateRef = useRef(state);
   stateRef.current = state;
   // Jangan timpa blob yang gagal dibaca dengan state kosong.
@@ -871,6 +907,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const openNewTab = useCallback(
     (url: string, opts?: { incognito?: boolean; workspaceId?: string; id?: string; activate?: boolean }) => {
       const id = opts?.id ?? uid('t-');
+      if (isNewTabUrl(url) && opts?.activate !== false) {
+        noteFreshTab(id);
+      }
       dispatch({
         type: 'ADD_TAB',
         id,

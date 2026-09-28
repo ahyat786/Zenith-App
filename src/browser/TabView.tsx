@@ -8,7 +8,7 @@
  *     Pembungkus idempoten mencegah skrip berjalan dua kali.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Text, View } from 'react-native';
 import { WebView as WebViewComponent, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
@@ -25,6 +25,8 @@ import { adblockShouldBlock } from '../core/native';
 import { DESKTOP_INJECT_SCRIPT, DESKTOP_UA, isDesktopUa } from '../core/desktop';
 import { planCached } from '../core/plan';
 import { webviewRefs } from './refs';
+import { claimWebViewLoad, forceWebViewLoad, pendingNavigationUrl, shouldApplyNavUrl } from './navIntent';
+import { isNewTabUrl } from './newtab';
 import { Button } from '../ui/kit';
 import { Icon } from '../ui/Icon';
 
@@ -36,7 +38,7 @@ interface Props {
 
 export function TabView({ tab, active, theme }: Props) {
   const { state, dispatch, siteConfigFor, openNewTab } = useStore();
-  const [initialUrl] = useState(tab.url);
+  const [sourceUrl, setSourceUrl] = useState(() => pendingNavigationUrl(tab.id) || tab.url);
   const lastHistoryUrl = useRef<string>('');
   const injectGen = useRef(0);
 
@@ -50,12 +52,39 @@ export function TabView({ tab, active, theme }: Props) {
     (ref: any) => {
       if (ref) {
         webviewRefs.set(tab.id, ref);
+        const locked = claimWebViewLoad(tab.id);
+        if (locked) {
+          setSourceUrl((cur) => (cur === locked ? cur : locked));
+          forceWebViewLoad(ref, locked);
+          // Satu putaran kemudian: native view kadang belum siap di callback ref.
+          setTimeout(() => {
+            if (pendingNavigationUrl(tab.id) === locked) {
+              forceWebViewLoad(webviewRefs.get(tab.id), locked);
+            }
+          }, 0);
+        }
       } else {
         webviewRefs.delete(tab.id);
       }
     },
     [tab.id],
   );
+
+  // URL yang diketik dari tab baru / omnibox harus dimuat, bukan hanya disimpan.
+  useEffect(() => {
+    const pending = pendingNavigationUrl(tab.id);
+    if (pending && pending !== sourceUrl) {
+      setSourceUrl(pending);
+    }
+    const wv = webviewRefs.get(tab.id);
+    if (!wv) {
+      return;
+    }
+    const locked = claimWebViewLoad(tab.id);
+    if (locked) {
+      forceWebViewLoad(wv, locked);
+    }
+  }, [tab.id, tab.url, sourceUrl]);
 
   // ---------------- injeksi per fase ----------------
   const injectPhase = useCallback(
@@ -108,17 +137,17 @@ export function TabView({ tab, active, theme }: Props) {
       }
       switch (msg.type) {
         case 'zen:docstart':
-          injectPhase('start', msg.url || initialUrl);
+          injectPhase('start', msg.url || sourceUrl);
           break;
         case 'zen:docend':
-          injectPhase('end', msg.url || initialUrl);
+          injectPhase('end', msg.url || sourceUrl);
           break;
         case 'zen:docidle':
-          injectPhase('idle', msg.url || initialUrl);
+          injectPhase('idle', msg.url || sourceUrl);
           break;
         case 'zen:urlchange': {
           const url = String(msg.url || '');
-          if (!url || url === 'about:blank') {
+          if (!url || url === 'about:blank' || !shouldApplyNavUrl(tab.id, url)) {
             break;
           }
           try {
@@ -155,13 +184,13 @@ export function TabView({ tab, active, theme }: Props) {
           break;
       }
     },
-    [tab.id, tab.url, initialUrl, injectPhase, dispatch, shieldOn],
+    [tab.id, tab.url, sourceUrl, injectPhase, dispatch, shieldOn],
   );
 
   // ---------------- navigasi ----------------
   const onNavigationStateChange = useCallback(
     (nav: WebViewNavigation) => {
-      if (!nav.url || nav.url === 'about:blank') {
+      if (!nav.url || nav.url === 'about:blank' || !shouldApplyNavUrl(tab.id, nav.url)) {
         return;
       }
       const patch: Partial<Tab> = {};
@@ -242,7 +271,7 @@ export function TabView({ tab, active, theme }: Props) {
     [tab.id, tab.progress, dispatch],
   );
 
-  if (!initialUrl || initialUrl === 'about:blank') {
+  if (!sourceUrl || sourceUrl === 'about:blank' || isNewTabUrl(sourceUrl)) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ color: theme.subtext }}>Tab kosong</Text>
@@ -251,10 +280,10 @@ export function TabView({ tab, active, theme }: Props) {
   }
 
   return (
-    <View style={{ flex: 1, display: active ? 'flex' : 'none' }}>
+    <View style={{ flex: 1, display: active ? 'flex' : 'none', zIndex: active ? 2 : 0 }}>
       <Wv
         ref={setRef}
-        source={{ uri: initialUrl }}
+        source={{ uri: sourceUrl }}
         style={{ flex: 1, backgroundColor: theme.bg }}
         originWhitelist={['*']}
         injectedJavaScriptBeforeContentLoaded={

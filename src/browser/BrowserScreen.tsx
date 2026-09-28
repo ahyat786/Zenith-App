@@ -32,6 +32,7 @@ import { NewTabPage } from './NewTabPage';
 import { getWebView } from './refs';
 import { consumeHardwareBack } from './backStack';
 import { NEW_TAB_URL, isNewTabUrl } from './newtab';
+import { freshTabId } from './navIntent';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, IconButton, Row, Sheet, ToggleRow, type SheetAction } from '../ui/kit';
 import {
@@ -103,7 +104,7 @@ export function BrowserScreen() {
   // ---------- sinkron: tab aktif selalu di workspace aktif ----------
   useEffect(() => {
     if (activeTab && activeTab.workspaceId !== state.activeWorkspaceId) {
-      dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: activeTab.workspaceId });
+      dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: activeTab.workspaceId, tabId: activeTab.id });
     }
   }, [activeTab?.id, activeTab?.workspaceId, state.activeWorkspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -299,7 +300,7 @@ export function BrowserScreen() {
     const shown = forceActive || tab.id === state.activeTabId;
     if (isNewTabUrl(tab.url)) {
       return (
-        <View key={tab.id} style={{ flex: 1, display: shown ? 'flex' : 'none' }}>
+        <View key={tab.id} style={{ flex: 1, display: shown ? 'flex' : 'none', zIndex: shown ? 2 : 0 }}>
           <NewTabPage theme={theme} tab={tab} />
         </View>
       );
@@ -598,10 +599,11 @@ export function BrowserScreen() {
   const empty = state.tabs.length === 0;
   const wsEmptyButTabsExist = !empty && wsTabs.length === 0;
   const mountTabs = useMemo(() => {
+    const freshId = freshTabId();
     const must = fullState.tabs.filter(
       (t) =>
         t.profileId === state.activeProfileId &&
-        (t.workspaceId === state.activeWorkspaceId || t.id === state.activeTabId),
+        (t.workspaceId === state.activeWorkspaceId || t.id === state.activeTabId || t.id === freshId),
     );
     const rest = fullState.tabs.filter(
       (t) =>
@@ -781,7 +783,7 @@ export function BrowserScreen() {
       {barTop ? bars : null}
 
       {/* ---------- konten ---------- */}
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, overflow: 'hidden' }}>
         {mountTabs
           .filter((t) => !(splitActive && splitIds.includes(t.id)))
           .map((t) => renderTab(t))}
