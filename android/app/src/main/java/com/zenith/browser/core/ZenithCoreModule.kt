@@ -3,6 +3,9 @@ package com.zenith.browser.core
 import android.content.ComponentName
 import android.content.Intent
 import android.provider.Settings
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -213,6 +216,36 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
     fun flushCookies(promise: Promise) {
         com.zenith.browser.webview.ZenithPrivate.flush()
         promise.resolve(true)
+    }
+
+    /** Sembunyikan setiap WebView saat tab baru terbuka, supaya permukaan lama tidak menembus. */
+    @ReactMethod
+    fun setPageHold(hold: Boolean) {
+        val activity = reactApplicationContext.currentActivity ?: return
+        activity.runOnUiThread {
+            val root = activity.window?.decorView ?: return@runOnUiThread
+            walkWebViews(root, hold)
+        }
+    }
+
+    private fun walkWebViews(view: View, hold: Boolean) {
+        if (view is WebView) {
+            view.visibility = if (hold) View.GONE else View.VISIBLE
+            try {
+                if (hold) {
+                    view.onPause()
+                } else {
+                    view.onResume()
+                }
+            } catch (_: Throwable) {
+            }
+            return
+        }
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                walkWebViews(view.getChildAt(i), hold)
+            }
+        }
     }
 
     /** Pulihkan kuki v0.4.4 yang tersesat di toples Zu, tanpa menimpa toples bawaan. */

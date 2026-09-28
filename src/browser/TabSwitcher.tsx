@@ -28,6 +28,7 @@ import { WORKSPACE_ICONS, uid } from '../state/defaults';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, Button, TextField, type SheetAction } from '../ui/kit';
 import { noteBackHandled, useHardwareBack } from './backStack';
+import { releaseBlankTab } from './navIntent';
 
 const GROUP_COLORS = ['#8b7cf6', '#60a5fa', '#4ade80', '#fbbf24', '#f472b6', '#f87171'];
 
@@ -98,6 +99,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
   const ctxGroupObj = groups.find((g) => g.id === ctxGroup) ?? null;
 
   const selectTab = (t: Tab) => {
+    releaseBlankTab();
     dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: t.workspaceId, tabId: t.id });
     dispatch({ type: 'SET_ACTIVE_TAB', id: t.id });
     close();
@@ -336,7 +338,10 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
               return (
                 <Pressable
                   key={ws.id}
-                  onPress={() => dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: ws.id })}
+                  onPress={() => {
+                    releaseBlankTab();
+                    dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: ws.id });
+                  }}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',

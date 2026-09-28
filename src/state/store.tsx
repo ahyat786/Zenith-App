@@ -44,7 +44,7 @@ import { flushCookies, readStateBackup, restoreCookieSnapshot, restorePrimaryCoo
 import { adblockAllowHost, adblockInit, adblockSetEnabled, expandSearch, normalizeInput } from '../core/native';
 import { setFastDownloadsEnabled } from '../core/downloads';
 import { isNewTabUrl } from '../browser/newtab';
-import { clearFreshTab, freshTabId, noteFreshTab } from '../browser/navIntent';
+import { canonicalUrl, clearFreshTab, freshTabId, holdBlankTab, noteFreshTab, pendingNavigationUrl, releaseBlankTab } from '../browser/navIntent';
 
 const STATE_KEY = 'zenith.state.v1';
 const BACKUP_KEY = 'zenith.state.backup.v1';
@@ -379,10 +379,29 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_SPLIT':
       return { ...state, splitTabIds: action.ids.length === 2 ? action.ids : [] };
     case 'UPDATE_TAB': {
-      const tabs = state.tabs.map((t) =>
-        t.id === action.id ? { ...t, ...action.patch } : t,
-      );
-      return { ...state, tabs };
+      const current = state.tabs.find((t) => t.id === action.id);
+      let patch = action.patch;
+      const nextUrl = patch.url;
+      if (current && nextUrl && nextUrl !== current.url) {
+        const pending = pendingNavigationUrl(action.id);
+        const samePending = !!pending && canonicalUrl(nextUrl) === canonicalUrl(pending);
+        const sameHost = !!pending && hostOfUrl(nextUrl) === hostOfUrl(pending);
+        const reject =
+          (isNewTabUrl(current.url) && !samePending && !sameHost) ||
+          (!!pending && !samePending && !sameHost);
+        if (reject) {
+          const rest = { ...patch };
+          delete rest.url;
+          patch = rest;
+        }
+      }
+      if (Object.keys(patch).length === 0) {
+        return state;
+      }
+      return {
+        ...state,
+        tabs: state.tabs.map((t) => (t.id === action.id ? { ...t, ...patch } : t)),
+      };
     }
     case 'MOVE_TAB': {
       const tabs = state.tabs.map((t) =>
@@ -649,6 +668,7 @@ function reducer(state: AppState, action: Action): AppState {
       if (!state.profiles.some((p) => p.id === action.id) || action.id === state.activeProfileId) {
         return state;
       }
+      releaseBlankTab();
       clearFreshTab();
       const profileFocus = {
         ...state.profileFocus,
@@ -932,8 +952,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const openNewTab = useCallback(
     (url: string, opts?: { incognito?: boolean; workspaceId?: string; id?: string; activate?: boolean }) => {
       const id = opts?.id ?? uid('t-');
-      if (isNewTabUrl(url) && opts?.activate !== false) {
-        noteFreshTab(id);
+      if (opts?.activate !== false) {
+        if (isNewTabUrl(url)) {
+          holdBlankTab();
+          noteFreshTab(id);
+        } else {
+          releaseBlankTab();
+          clearFreshTab();
+        }
       }
       dispatch({
         type: 'ADD_TAB',

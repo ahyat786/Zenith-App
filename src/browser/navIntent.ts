@@ -6,9 +6,18 @@
  * diketik. Catatan ini mengunci tujuan sampai halaman itu benar-benar termuat.
  */
 
+import { NativeModules } from 'react-native';
 import type { Tab } from '../types';
 import { getWebView } from './refs';
 import { isBlankWebUrl, isNewTabUrl } from './newtab';
+
+function setNativePageHold(hold: boolean): void {
+  try {
+    NativeModules.ZenithCore?.setPageHold?.(hold);
+  } catch {
+    // jembatan native belum siap
+  }
+}
 
 const probes = new Map<string, { token: string; timer: ReturnType<typeof setTimeout> }>();
 
@@ -153,6 +162,22 @@ interface Intent {
 
 const intents = new Map<string, Intent>();
 let freshId: string | null = null;
+let blankHold = false;
+
+/** Tab baru harus menutup halaman sebelumnya, meski state sempat kembali ke tab lama. */
+export function holdBlankTab(): void {
+  blankHold = true;
+  setNativePageHold(true);
+}
+
+export function releaseBlankTab(): void {
+  blankHold = false;
+  setNativePageHold(false);
+}
+
+export function blankTabHeld(): boolean {
+  return blankHold;
+}
 
 export function noteFreshTab(id: string): void {
   freshId = id;
@@ -312,6 +337,7 @@ export function beginTabNavigation(
   blocked: string[],
   activeTabId: string | null,
 ): void {
+  releaseBlankTab();
   commitNavigation(tab.id, url, tab.url, blocked);
   const patch: Partial<Tab> = {
     url,

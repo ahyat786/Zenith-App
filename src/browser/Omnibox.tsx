@@ -26,7 +26,7 @@ import { fetchSuggestions, fuzzyScore } from '../core/suggest';
 import { getWebView } from './refs';
 import { isNewTabUrl } from './newtab';
 import { noteBackHandled } from './backStack';
-import { beginTabNavigation, commitNavigation, freshTabId, otherTabUrls } from './navIntent';
+import { beginTabNavigation, commitNavigation, freshTabId, otherTabUrls, releaseBlankTab } from './navIntent';
 import { Icon, type IconName } from '../ui/Icon';
 
 interface SuggestionRow {
@@ -203,6 +203,7 @@ export function Omnibox({ theme }: { theme: Theme }) {
             title: t.t.title || t.t.url,
             subtitle: 'Tab terbuka — ketuk untuk pindah',
             onPress: () => {
+              releaseBlankTab();
               dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: t.t.workspaceId, tabId: t.t.id });
               dispatch({ type: 'SET_ACTIVE_TAB', id: t.t.id });
               close();

@@ -411,7 +411,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent={`Zenith/0.4.7 zp:${tab.profileId || 'profile-utama'}`}
+        applicationNameForUserAgent={`Zenith/0.4.8 zp:${tab.profileId || 'profile-utama'}`}
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

@@ -42,7 +42,7 @@ class ZenithWebViewManager : RNCWebViewManager() {
         if (idx >= 0) {
             ZenithPrivate.noteProfile(view.webView, raw.substring(idx + marker.length).trim())
             val ua = raw.substring(0, idx).trim()
-            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.4.7" else ua)
+            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.4.8" else ua)
         } else {
             super.setApplicationNameForUserAgent(view, value)
         }
@@ -66,6 +66,15 @@ class ZenithWebViewManager : RNCWebViewManager() {
         }
     }
 
+    override fun onDropViewInstance(view: RNCWebViewWrapper) {
+        try {
+            view.webView.stopLoading()
+            view.webView.onPause()
+        } catch (_: Throwable) {
+        }
+        super.onDropViewInstance(view)
+    }
+
     private fun loadSource(view: RNCWebViewWrapper, source: ReadableMap?) {
         super.setNewSource(view, source)
         val uri = try {
@@ -81,9 +90,12 @@ class ZenithWebViewManager : RNCWebViewManager() {
         } catch (_: Throwable) {
             null
         }
-        // WebView daur ulang bisa tetap di URL tab sebelumnya meski source baru berbeda.
-        if (!current.isNullOrBlank() && current != uri) {
+        // View daur ulang bisa menolak loadUrl jika URL-nya sudah sama, atau tetap
+        // menampilkan dokumen tab sebelumnya. Kosongkan riwayat lalu muat ulang.
+        if (current != uri) {
             try {
+                view.webView.stopLoading()
+                view.webView.clearHistory()
                 view.webView.loadUrl(uri)
             } catch (_: Throwable) {
             }

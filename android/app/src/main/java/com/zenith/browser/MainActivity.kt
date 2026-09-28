@@ -1,12 +1,10 @@
 package com.zenith.browser
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -33,10 +31,6 @@ class MainActivity : ReactActivity() {
     // Update mematikan proses. Kuki yang belum di-flush hilang dari disk.
     try {
       CookieManager.getInstance().flush()
-    } catch (_: Throwable) {
-    }
-    try {
-      ZenithSessionService.setInBackground(this, true)
     } catch (_: Throwable) {
     }
   }
@@ -71,19 +65,12 @@ class MainActivity : ReactActivity() {
       }
     } catch (_: Throwable) {
     }
-    try {
-      ZenithSessionService.start(this)
-    } catch (_: Throwable) {
-    }
+    dismissSessionNotice()
   }
 
   override fun onResume() {
     super.onResume()
-    window?.decorView?.postDelayed({ askBatteryOnce() }, 1500)
-    try {
-      ZenithSessionService.setInBackground(this, false)
-    } catch (_: Throwable) {
-    }
+    dismissSessionNotice()
     // Setelah lama di latar, timer dan permukaan WebView sering mati.
     // Tanpa onResume halaman tetap putih meski URL tab masih tersimpan.
     window?.decorView?.let { root ->
@@ -98,26 +85,14 @@ class MainActivity : ReactActivity() {
     }
   }
 
-  private fun askBatteryOnce() {
-    if (Build.VERSION.SDK_INT < 23) {
-      return
-    }
-    val prefs = getSharedPreferences("zenith", MODE_PRIVATE)
-    if (prefs.getBoolean("asked_battery", false)) {
-      return
-    }
-    prefs.edit().putBoolean("asked_battery", true).apply()
-    val pm = getSystemService(POWER_SERVICE) as? PowerManager ?: return
-    if (pm.isIgnoringBatteryOptimizations(packageName)) {
-      return
+  private fun dismissSessionNotice() {
+    try {
+      stopService(Intent(this, ZenithSessionService::class.java))
+    } catch (_: Throwable) {
     }
     try {
-      startActivity(
-        Intent(
-          Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-          Uri.parse("package:$packageName"),
-        ),
-      )
+      val nm = getSystemService(NOTIFICATION_SERVICE) as? NotificationManager
+      nm?.cancel(4107)
     } catch (_: Throwable) {
     }
   }
@@ -138,6 +113,7 @@ class MainActivity : ReactActivity() {
     // Jangan pulihkan hierarki lama. Setelah proses dibunuh, state Android
     // sering mengembalikan WebView kosong dan React mengira URL sudah termuat.
     super.onCreate(null)
+    dismissSessionNotice()
     // Edge-to-edge: pastikan konten digambar dari ujung ke ujung dan inset
     // sistem terlapor benar ke react-native-safe-area-context, sehingga
     // tombol bar bawah tidak tertutup area gestur dan tetap bisa diklik.

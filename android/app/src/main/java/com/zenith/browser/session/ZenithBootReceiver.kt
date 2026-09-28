@@ -4,18 +4,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 
-/** Setelah boot atau update, coba lanjutkan layanan latar. Gagal diam-diam jika sistem menolak. */
+/** Setelah update, cabut notifikasi latar lama. Tidak menjalankan layanan baru. */
 class ZenithBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        val action = intent?.action ?: return
-        if (
-            action != Intent.ACTION_BOOT_COMPLETED &&
-            action != Intent.ACTION_MY_PACKAGE_REPLACED
-        ) {
+        if (intent?.action != Intent.ACTION_MY_PACKAGE_REPLACED) {
             return
         }
         try {
-            ZenithSessionService.start(context.applicationContext)
+            ZenithSessionService.stop(context.applicationContext)
         } catch (_: Throwable) {
         }
     }

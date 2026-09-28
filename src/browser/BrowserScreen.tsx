@@ -32,7 +32,7 @@ import { NewTabPage } from './NewTabPage';
 import { getWebView } from './refs';
 import { consumeHardwareBack, noteBackHandled, wasBackJustHandled } from './backStack';
 import { NEW_TAB_URL, isNewTabUrl } from './newtab';
-import { freshTabId } from './navIntent';
+import { blankTabHeld, freshTabId, releaseBlankTab } from './navIntent';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, IconButton, Row, Sheet, ToggleRow, type SheetAction } from '../ui/kit';
 import {
@@ -57,7 +57,7 @@ export function BrowserScreen() {
   const [download, setDownload] = useState<DownloadJob | null>(null);
   const [connLog, setConnLog] = useState<ConnLogEntry[]>([]);
   const [profilesOpen, setProfilesOpen] = useState(false);
-  const [soloLoad, setSoloLoad] = useState(true);
+
 
   const wsTabs = tabsInWorkspace(state.activeWorkspaceId);
   const splitIds = state.splitTabIds;
@@ -247,13 +247,8 @@ export function BrowserScreen() {
     (t) => t.id === freshTabId() && t.profileId === state.activeProfileId && isNewTabUrl(t.url),
   );
   const freshOpenId = freshOpen ? freshOpen.id : null;
-  const onNewTabPage = freshOpenId != null || !activeTab || isNewTabUrl(activeTab?.url);
-  // Tab baru dimuat sendiri dulu, supaya WebView tab lama tidak menempel.
-  useEffect(() => {
-    setSoloLoad(true);
-    const t = setTimeout(() => setSoloLoad(false), 800);
-    return () => clearTimeout(t);
-  }, [state.activeProfileId, onNewTabPage]);
+  const onNewTabPage =
+    blankTabHeld() || freshOpenId != null || !activeTab || isNewTabUrl(activeTab?.url);
   const openOmniboxEdit = () =>
     dispatch({
       type: 'SET_OMNIBOX',
@@ -363,7 +358,10 @@ export function BrowserScreen() {
         return (
           <Pressable
             key={ws.id}
-            onPress={() => dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: ws.id })}
+            onPress={() => {
+              releaseBlankTab();
+              dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: ws.id });
+            }}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -630,19 +628,12 @@ export function BrowserScreen() {
     const pid = state.activeProfileId;
     const mine = fullState.tabs.filter((t) => t.profileId === pid);
     // Tab baru tidak boleh menampilkan WebView tab atau profil lain.
+    // Satu WebView saja: tab lain tidak boleh menempel atau menyalin URL-nya.
     if (onNewTabPage) {
-      return mine.filter((t) => isNewTabUrl(t.url) || t.id === freshOpenId);
+      return [];
     }
-    if (soloLoad) {
-      return mine.filter((t) => t.id === state.activeTabId || t.id === freshOpenId);
-    }
-    const freshId = freshTabId();
-    const must = mine.filter(
-      (t) => t.workspaceId === state.activeWorkspaceId || t.id === state.activeTabId || t.id === freshId,
-    );
-    const rest = mine.filter((t) => !must.some((m) => m.id === t.id));
-    return [...must, ...rest.slice(0, Math.max(0, 8 - must.length))];
-  }, [fullState.tabs, state.activeProfileId, state.activeWorkspaceId, state.activeTabId, onNewTabPage, soloLoad, freshOpenId]);
+    return mine.filter((t) => t.id === state.activeTabId && !isNewTabUrl(t.url));
+  }, [fullState.tabs, state.activeProfileId, state.activeWorkspaceId, state.activeTabId, onNewTabPage, freshOpenId]);
 
   // ---------- panel SHIELD GUARD (Brave + log koneksi) ----------
   const shieldsSheet = (
@@ -814,11 +805,25 @@ export function BrowserScreen() {
       {barTop ? bars : null}
 
       {/* ---------- konten ---------- */}
-      <View key={state.activeProfileId} style={{ flex: 1, overflow: 'hidden', backgroundColor: theme.bg }}>
-        {mountTabs
+      <View
+        key={onNewTabPage ? `${state.activeProfileId}:blank` : state.activeProfileId}
+        style={{ flex: 1, overflow: 'hidden', backgroundColor: theme.bg }}
+      >
+        {onNewTabPage ? null : mountTabs
           .filter((t) => !(splitActive && splitIds.includes(t.id)))
           .map((t) => renderTab(t))}
-        {empty ? (
+        {onNewTabPage ? (
+          <View
+            collapsable={false}
+            style={[StyleSheet.absoluteFill, { backgroundColor: theme.bg, zIndex: 30, elevation: 24 }]}
+          >
+            <NewTabPage
+              theme={theme}
+              tab={freshOpen ?? (activeTab && isNewTabUrl(activeTab.url) ? activeTab : null)}
+            />
+          </View>
+        ) : null}
+        {onNewTabPage ? null : empty ? (
           <View style={StyleSheet.absoluteFill}>
             <NewTabPage theme={theme} />
           </View>
@@ -833,7 +838,7 @@ export function BrowserScreen() {
             </Text>
           </View>
         ) : null}
-        {splitActive ? (
+        {splitActive && !onNewTabPage ? (
           <View style={StyleSheet.absoluteFill}>
             <View style={{ flex: 1, flexDirection: 'row' }}>
               <View style={{ flex: 1 }}>{renderTab(splitA!, true)}</View>

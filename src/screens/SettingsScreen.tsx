@@ -187,7 +187,7 @@ export function SettingsScreen() {
     { id: 'data', title: 'Data', subtitle: `${state.history.length} riwayat`, panel: 'data' },
     { id: 'sandi', title: 'Sandi', subtitle: 'Tidak disimpan di Zenith', screen: 'passwords' },
     { id: 'unduh', title: 'Unduhan', subtitle: 'Riwayat berkas', screen: 'downloads' },
-    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.4.7', screen: 'about' },
+    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.4.8', screen: 'about' },
   ];
   const panelTitle: Record<SettingsPanel, string> = {
     home: 'Pengaturan',
