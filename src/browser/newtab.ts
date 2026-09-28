@@ -7,3 +7,20 @@ export function isNewTabUrl(url?: string | null): boolean {
   }
   return url === NEW_TAB_URL || url === 'about:blank' || url === 'about:newtab';
 }
+
+/** Halaman mati yang tidak boleh menimpa URL tab yang tersimpan. */
+export function isBlankWebUrl(url?: string | null): boolean {
+  if (!url) {
+    return true;
+  }
+  const u = url.trim().toLowerCase();
+  return (
+    !u ||
+    u === 'about:blank' ||
+    u.startsWith('about:') ||
+    u.startsWith('chrome-error:') ||
+    u.startsWith('chrome://') ||
+    u === 'data:,' ||
+    u.startsWith('data:text/html,')
+  );
+}

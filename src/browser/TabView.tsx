@@ -9,7 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Text, View } from 'react-native';
+import { AppState, Linking, Text, View } from 'react-native';
 import { WebView as WebViewComponent, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 
@@ -25,8 +25,16 @@ import { adblockShouldBlock } from '../core/native';
 import { DESKTOP_INJECT_SCRIPT, DESKTOP_UA, isDesktopUa } from '../core/desktop';
 import { planCached } from '../core/plan';
 import { webviewRefs } from './refs';
-import { claimWebViewLoad, forceWebViewLoad, pendingNavigationUrl, shouldApplyNavUrl } from './navIntent';
-import { isNewTabUrl } from './newtab';
+import {
+  claimWebViewLoad,
+  forceWebViewLoad,
+  cancelBlankProbe,
+  noteBlankProbeResult,
+  pendingNavigationUrl,
+  probeBlankWebView,
+  shouldApplyNavUrl,
+} from './navIntent';
+import { isBlankWebUrl, isNewTabUrl } from './newtab';
 import { Button } from '../ui/kit';
 import { Icon } from '../ui/Icon';
 
@@ -41,6 +49,8 @@ export function TabView({ tab, active, theme }: Props) {
   const [sourceUrl, setSourceUrl] = useState(() => pendingNavigationUrl(tab.id) || tab.url);
   const lastHistoryUrl = useRef<string>('');
   const injectGen = useRef(0);
+  const mountedAt = useRef(Date.now());
+  const loadedOnce = useRef(false);
 
   const siteCfg = siteConfigFor(tab.url);
   /** Mode desktop per-situs: UA macOS + viewport 1280 + scalesPageToFit. */
@@ -75,6 +85,14 @@ export function TabView({ tab, active, theme }: Props) {
     const pending = pendingNavigationUrl(tab.id);
     if (pending && pending !== sourceUrl) {
       setSourceUrl(pending);
+    } else if (
+      !pending &&
+      tab.url &&
+      !isNewTabUrl(tab.url) &&
+      tab.url !== sourceUrl &&
+      (!sourceUrl || isBlankWebUrl(sourceUrl))
+    ) {
+      setSourceUrl(tab.url);
     }
     const wv = webviewRefs.get(tab.id);
     if (!wv) {
@@ -85,6 +103,50 @@ export function TabView({ tab, active, theme }: Props) {
       forceWebViewLoad(wv, locked);
     }
   }, [tab.id, tab.url, sourceUrl]);
+
+  const recoverIfBlank = useCallback(() => {
+    if (pendingNavigationUrl(tab.id)) {
+      return;
+    }
+    if (!loadedOnce.current && Date.now() - mountedAt.current < 2500) {
+      return;
+    }
+    if (!active) {
+      return;
+    }
+    probeBlankWebView(tab.id, tab.url);
+  }, [active, tab.id, tab.url]);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    const wait = loadedOnce.current ? 400 : Math.max(0, 2500 - (Date.now() - mountedAt.current));
+    const timer = setTimeout(recoverIfBlank, wait);
+    return () => clearTimeout(timer);
+  }, [active, recoverIfBlank]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        if (timer) {
+          clearTimeout(timer);
+        }
+        timer = setTimeout(recoverIfBlank, 350);
+      }
+    });
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      sub.remove();
+    };
+  }, [recoverIfBlank]);
+
+  useEffect(() => {
+    return () => cancelBlankProbe(tab.id);
+  }, [tab.id]);
 
   // ---------------- injeksi per fase ----------------
   const injectPhase = useCallback(
@@ -145,9 +207,15 @@ export function TabView({ tab, active, theme }: Props) {
         case 'zen:docidle':
           injectPhase('idle', msg.url || sourceUrl);
           break;
+        case 'zen:health':
+          noteBlankProbeResult(tab.id, String(msg.token || ''), !!msg.dead, tab.url);
+          break;
         case 'zen:urlchange': {
           const url = String(msg.url || '');
-          if (!url || url === 'about:blank' || !shouldApplyNavUrl(tab.id, url)) {
+          if (!url || isBlankWebUrl(url) || !shouldApplyNavUrl(tab.id, url)) {
+            break;
+          }
+          if (/^https?:/i.test(tab.url) && !/^https?:/i.test(url)) {
             break;
           }
           try {
@@ -190,11 +258,15 @@ export function TabView({ tab, active, theme }: Props) {
   // ---------------- navigasi ----------------
   const onNavigationStateChange = useCallback(
     (nav: WebViewNavigation) => {
-      if (!nav.url || nav.url === 'about:blank' || !shouldApplyNavUrl(tab.id, nav.url)) {
+      if (!nav.url || isBlankWebUrl(nav.url) || !shouldApplyNavUrl(tab.id, nav.url)) {
         return;
       }
+      if (/^https?:/i.test(nav.url)) {
+        loadedOnce.current = true;
+      }
       const patch: Partial<Tab> = {};
-      if (nav.url !== tab.url) {
+      const keepSaved = /^https?:/i.test(tab.url) && !/^https?:/i.test(nav.url);
+      if (!keepSaved && nav.url !== tab.url) {
         patch.url = nav.url;
       }
       if (nav.title && nav.title !== tab.title) {
@@ -294,6 +366,7 @@ export function TabView({ tab, active, theme }: Props) {
         onNavigationStateChange={onNavigationStateChange}
         onLoadingProgress={onProgress}
         onLoadEnd={() => {
+          loadedOnce.current = true;
           dispatch({ type: 'UPDATE_TAB', id: tab.id, patch: { loading: false, progress: 1 } });
         }}
         cacheEnabled
@@ -304,8 +377,14 @@ export function TabView({ tab, active, theme }: Props) {
           }
         }}
         onRenderProcessGone={() => {
-          // prosus render WebView gagal — muat ulang
-          setTimeout(() => webviewRefs.get(tab.id)?.reload(), 250);
+          // Proses render mati setelah lama di latar. reload() pada about:blank tetap kosong.
+          const url = tab.url;
+          loadedOnce.current = true;
+          setTimeout(() => {
+            if (url && !isNewTabUrl(url)) {
+              forceWebViewLoad(webviewRefs.get(tab.id), url);
+            }
+          }, 200);
         }}
         renderError={() => (
           <View
@@ -338,7 +417,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent={`Zenith/0.4.5 zp:${tab.profileId || 'profile-utama'}`}
+        applicationNameForUserAgent={`Zenith/0.4.6 zp:${tab.profileId || 'profile-utama'}`}
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

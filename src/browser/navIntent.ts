@@ -10,6 +10,65 @@ import type { Tab } from '../types';
 import { getWebView } from './refs';
 import { isNewTabUrl } from './newtab';
 
+const probes = new Map<string, { token: string; timer: ReturnType<typeof setTimeout> }>();
+
+export function cancelBlankProbe(tabId: string): void {
+  const probe = probes.get(tabId);
+  if (!probe) {
+    return;
+  }
+  clearTimeout(probe.timer);
+  probes.delete(tabId);
+}
+
+/** Renderer mati setelah aplikasi lama di latar: inject tidak menjawab, atau href masih about:blank. */
+export function probeBlankWebView(tabId: string, expectedUrl: string): void {
+  if (!expectedUrl || isNewTabUrl(expectedUrl) || !/^https?:/i.test(expectedUrl)) {
+    return;
+  }
+  if (pendingNavigationUrl(tabId)) {
+    return;
+  }
+  const wv = getWebView(tabId);
+  if (!wv) {
+    return;
+  }
+  cancelBlankProbe(tabId);
+  const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const timer = setTimeout(() => {
+    if (probes.get(tabId)?.token !== token) {
+      return;
+    }
+    probes.delete(tabId);
+    forceWebViewLoad(getWebView(tabId), expectedUrl);
+  }, 2200);
+  probes.set(tabId, { token, timer });
+  const script =
+    `(function(){try{var h=String(location.href||'');` +
+    `try{window.scrollBy(0,1);window.scrollBy(0,-1);}catch(e){}` +
+    `var dead=!h||h==='about:blank'||h.indexOf('about:blank')===0;` +
+    `if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'zen:health',dead:dead,href:h,token:${JSON.stringify(token)}}));}` +
+    `}catch(e){}})();true;`;
+  try {
+    (wv as any).injectJavaScript(script);
+  } catch {
+    cancelBlankProbe(tabId);
+    forceWebViewLoad(wv, expectedUrl);
+  }
+}
+
+export function noteBlankProbeResult(tabId: string, token: string, dead: boolean, expectedUrl: string): void {
+  const probe = probes.get(tabId);
+  if (!probe || probe.token !== token) {
+    return;
+  }
+  clearTimeout(probe.timer);
+  probes.delete(tabId);
+  if (dead) {
+    forceWebViewLoad(getWebView(tabId), expectedUrl);
+  }
+}
+
 interface Intent {
   url: string;
   previous: string | null;

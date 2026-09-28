@@ -94,7 +94,9 @@ object ZenithPrivate {
         val settings = webView.settings
         settings.domStorageEnabled = true
         if (Build.VERSION.SDK_INT >= 26) {
-            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
+            // false: jangan cabut prioritas saat aplikasi tidak terlihat.
+            // waived=true membuat renderer mati setelah lama di latar, tab putih.
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
         }
         if (incognito) {
             marked.add(webView)

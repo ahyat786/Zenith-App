@@ -1,7 +1,10 @@
 package com.zenith.browser
 
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.WebView
 import androidx.core.view.WindowCompat
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -25,8 +28,42 @@ class MainActivity : ReactActivity() {
     }
   }
 
+  override fun onResume() {
+    super.onResume()
+    // Setelah lama di latar, timer dan permukaan WebView sering mati.
+    // Tanpa onResume halaman tetap putih meski URL tab masih tersimpan.
+    try {
+      WebView.resumeTimers()
+    } catch (_: Throwable) {
+    }
+    window?.decorView?.let { root ->
+      forEachWebView(root) { webView ->
+        try {
+          webView.onResume()
+          webView.resumeTimers()
+          webView.post { webView.invalidate() }
+        } catch (_: Throwable) {
+        }
+      }
+    }
+  }
+
+  private fun forEachWebView(view: View, block: (WebView) -> Unit) {
+    if (view is WebView) {
+      block(view)
+      return
+    }
+    if (view is ViewGroup) {
+      for (i in 0 until view.childCount) {
+        forEachWebView(view.getChildAt(i), block)
+      }
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+    // Jangan pulihkan hierarki lama. Setelah proses dibunuh, state Android
+    // sering mengembalikan WebView kosong dan React mengira URL sudah termuat.
+    super.onCreate(null)
     // Edge-to-edge: pastikan konten digambar dari ujung ke ujung dan inset
     // sistem terlapor benar ke react-native-safe-area-context, sehingga
     // tombol bar bawah tidak tertutup area gestur dan tetap bisa diklik.

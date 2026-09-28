@@ -23,7 +23,12 @@ class ZenithWebViewManager : RNCWebViewManager() {
     override fun createViewInstance(reactContext: ThemedReactContext): RNCWebViewWrapper {
         // Jangan setProfile di sini. Profil tab belum diketahui, dan profil
         // utama harus tetap di toples bawaan supaya akun tidak hilang.
-        return super.createViewInstance(reactContext)
+        val view = super.createViewInstance(reactContext)
+        // State tersimpan Android bisa mengembalikan URL tanpa isi. RN lalu
+        // melewatkan loadUrl karena URL-nya sama, dan tab terbuka putih.
+        view.webView.saveEnabled = false
+        view.webView.isSaveFromParentEnabled = false
+        return view
     }
 
     override fun setIncognito(view: RNCWebViewWrapper, value: Boolean) {
@@ -37,7 +42,7 @@ class ZenithWebViewManager : RNCWebViewManager() {
         if (idx >= 0) {
             ZenithPrivate.noteProfile(view.webView, raw.substring(idx + marker.length).trim())
             val ua = raw.substring(0, idx).trim()
-            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.4.5" else ua)
+            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.4.6" else ua)
         } else {
             super.setApplicationNameForUserAgent(view, value)
         }
