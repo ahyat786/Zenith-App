@@ -218,32 +218,34 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
         promise.resolve(true)
     }
 
-    /** Sembunyikan setiap WebView saat tab baru terbuka, supaya permukaan lama tidak menembus. */
+    /** Singkirkan permukaan WebView lama saat tab baru terbuka. Jangan kembalikan; view baru yang memuat URL. */
     @ReactMethod
     fun setPageHold(hold: Boolean) {
+        if (!hold) {
+            return
+        }
         val activity = reactApplicationContext.currentActivity ?: return
         activity.runOnUiThread {
             val root = activity.window?.decorView ?: return@runOnUiThread
-            walkWebViews(root, hold)
+            hideWebViews(root)
         }
     }
 
-    private fun walkWebViews(view: View, hold: Boolean) {
+    private fun hideWebViews(view: View) {
         if (view is WebView) {
-            view.visibility = if (hold) View.GONE else View.VISIBLE
             try {
-                if (hold) {
-                    view.onPause()
-                } else {
-                    view.onResume()
-                }
+                view.stopLoading()
+                view.onPause()
             } catch (_: Throwable) {
             }
+            view.translationX = 100000f
+            view.alpha = 0f
+            view.visibility = View.GONE
             return
         }
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
-                walkWebViews(view.getChildAt(i), hold)
+                hideWebViews(view.getChildAt(i))
             }
         }
     }

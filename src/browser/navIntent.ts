@@ -12,14 +12,39 @@ import { getWebView } from './refs';
 import { isBlankWebUrl, isNewTabUrl } from './newtab';
 
 function setNativePageHold(hold: boolean): void {
+  if (!hold) {
+    return;
+  }
   try {
-    NativeModules.ZenithCore?.setPageHold?.(hold);
+    NativeModules.ZenithCore?.setPageHold?.(true);
   } catch {
     // jembatan native belum siap
   }
 }
 
 const probes = new Map<string, { token: string; timer: ReturnType<typeof setTimeout> }>();
+const recoveredBlank = new Set<string>();
+const urlLocks = new Set<string>();
+
+/** Tab yang sudah ada tidak boleh diganti URL-nya oleh tab baru. */
+export function lockTabUrls(ids: string[]): void {
+  urlLocks.clear();
+  for (const id of ids) {
+    if (id) {
+      urlLocks.add(id);
+    }
+  }
+}
+
+export function unlockTabUrl(id: string | null | undefined): void {
+  if (id) {
+    urlLocks.delete(id);
+  }
+}
+
+export function tabUrlLocked(id: string | null | undefined): boolean {
+  return !!id && urlLocks.has(id);
+}
 
 export function cancelBlankProbe(tabId: string): void {
   const probe = probes.get(tabId);
@@ -38,23 +63,25 @@ export function probeBlankWebView(tabId: string, expectedUrl: string): void {
   if (pendingNavigationUrl(tabId)) {
     return;
   }
+  const key = `${tabId}|${canonicalUrl(expectedUrl)}`;
+  if (recoveredBlank.has(key)) {
+    return;
+  }
   const wv = getWebView(tabId);
   if (!wv) {
     return;
   }
   cancelBlankProbe(tabId);
   const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  // Diam bukan alasan memuat ulang. Timer lama inilah yang membuat tombol refresh berputar terus.
   const timer = setTimeout(() => {
-    if (probes.get(tabId)?.token !== token) {
-      return;
+    if (probes.get(tabId)?.token === token) {
+      probes.delete(tabId);
     }
-    probes.delete(tabId);
-    forceWebViewLoad(getWebView(tabId), expectedUrl);
   }, 2200);
   probes.set(tabId, { token, timer });
   const script =
     `(function(){try{var h=String(location.href||'');` +
-    `try{window.scrollBy(0,1);window.scrollBy(0,-1);}catch(e){}` +
     `var dead=!h||h==='about:blank'||h.indexOf('about:blank')===0;` +
     `if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'zen:health',dead:dead,href:h,token:${JSON.stringify(token)}}));}` +
     `}catch(e){}})();true;`;
@@ -62,7 +89,6 @@ export function probeBlankWebView(tabId: string, expectedUrl: string): void {
     (wv as any).injectJavaScript(script);
   } catch {
     cancelBlankProbe(tabId);
-    forceWebViewLoad(wv, expectedUrl);
   }
 }
 
@@ -79,31 +105,20 @@ export function noteBlankProbeResult(
   }
   clearTimeout(probe.timer);
   probes.delete(tabId);
-  const foreign =
-    !!href &&
-    !isNewTabUrl(href) &&
-    !sameUrl(href, expectedUrl) &&
-    hostOf(href) !== hostOf(expectedUrl);
-  if ((dead || foreign) && expectedUrl && !isNewTabUrl(expectedUrl)) {
-    forceWebViewLoad(getWebView(tabId), expectedUrl);
+  if (!dead || !expectedUrl || isNewTabUrl(expectedUrl)) {
+    return;
   }
+  const key = `${tabId}|${canonicalUrl(expectedUrl)}`;
+  if (recoveredBlank.has(key)) {
+    return;
+  }
+  recoveredBlank.add(key);
+  forceWebViewLoad(getWebView(tabId), expectedUrl);
 }
 
 const epochs = new Map<string, number>();
 const ownedLoads = new Set<string>();
 const foreignReloads = new Map<string, number>();
-
-function reloadExpected(tabId: string, expected: string): void {
-  if (!expected || isNewTabUrl(expected) || !/^https?:/i.test(expected)) {
-    return;
-  }
-  const n = (foreignReloads.get(tabId) ?? 0) + 1;
-  foreignReloads.set(tabId, n);
-  if (n > 4) {
-    return;
-  }
-  forceWebViewLoad(getWebView(tabId), expected);
-}
 
 /**
  * true = URL ini milik tab ini dan boleh disimpan.
@@ -117,16 +132,6 @@ export function guardNavigation(
 ): boolean {
   const expected = pendingNavigationUrl(tabId) || expectedUrl;
   if (!shouldApplyNavUrl(tabId, navUrl)) {
-    if (
-      expected &&
-      !isNewTabUrl(expected) &&
-      navUrl &&
-      !isBlankWebUrl(navUrl) &&
-      !sameUrl(navUrl, expected) &&
-      hostOf(navUrl) !== hostOf(expected)
-    ) {
-      reloadExpected(tabId, expected);
-    }
     return false;
   }
   if (ownedLoads.has(tabId)) {
@@ -138,7 +143,6 @@ export function guardNavigation(
     !!expected &&
     !sameUrl(navUrl, expected);
   if (foreign) {
-    reloadExpected(tabId, expected);
     return false;
   }
   ownedLoads.add(tabId);
@@ -337,6 +341,10 @@ export function beginTabNavigation(
   blocked: string[],
   activeTabId: string | null,
 ): void {
+  if (tabUrlLocked(tab.id)) {
+    return;
+  }
+  unlockTabUrl(tab.id);
   releaseBlankTab();
   commitNavigation(tab.id, url, tab.url, blocked);
   const patch: Partial<Tab> = {

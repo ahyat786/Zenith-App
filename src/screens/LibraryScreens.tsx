@@ -8,7 +8,7 @@ import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import { hostOfUrl, useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
-import { Button, ListSection, Row } from '../ui/kit';
+import { Button, IconButton, ListSection, Row, TextField } from '../ui/kit';
 import type { HistoryItem } from '../types';
 import { PROFILE_COLORS, uid } from '../state/defaults';
 
@@ -33,9 +33,15 @@ function dayLabel(at: number): string {
 export function HistoryScreen() {
   const { state, dispatch, openNewTab } = useStore();
   const theme = useTheme(state.settings.theme);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const back = () => dispatch({ type: 'SET_SCREEN', screen: 'browser' });
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? state.history.filter((h) => `${h.title} ${h.url}`.toLowerCase().includes(q))
+    : state.history;
   const groups: { label: string; items: HistoryItem[] }[] = [];
-  for (const item of state.history) {
+  for (const item of visible) {
     const label = dayLabel(item.at);
     const last = groups[groups.length - 1];
     if (!last || last.label !== label) {
@@ -46,7 +52,34 @@ export function HistoryScreen() {
   }
 
   return (
-    <ScreenShell title="Riwayat" onBack={back} theme={theme}>
+    <ScreenShell
+      title="Riwayat"
+      onBack={back}
+      theme={theme}
+      right={
+        <IconButton
+          name={searchOpen ? 'close' : 'search'}
+          theme={theme}
+          onPress={() => {
+            setSearchOpen((open) => {
+              if (open) {
+                setQuery('');
+              }
+              return !open;
+            });
+          }}
+        />
+      }>
+      {searchOpen ? (
+        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md }}>
+          <TextField
+            theme={theme}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Cari judul atau alamat"
+          />
+        </View>
+      ) : null}
       {state.history.length > 0 ? (
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md }}>
           <Pressable
@@ -62,7 +95,9 @@ export function HistoryScreen() {
       ) : null}
       {groups.length === 0 ? (
         <View style={{ padding: spacing.lg }}>
-          <Text style={{ color: theme.subtext }}>Belum ada riwayat. Tab privat tidak dicatat.</Text>
+          <Text style={{ color: theme.subtext }}>
+            {q ? 'Tidak ada riwayat yang cocok.' : 'Belum ada riwayat. Tab privat tidak dicatat.'}
+          </Text>
         </View>
       ) : (
         groups.map((g) => (

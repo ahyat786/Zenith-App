@@ -114,10 +114,20 @@ export function TabView({ tab, active, theme }: Props) {
     if (!active) {
       return;
     }
-    const wait = loadedOnce.current ? 400 : Math.max(0, 2500 - (Date.now() - mountedAt.current));
+    const wait = loadedOnce.current ? 800 : Math.max(0, 2500 - (Date.now() - mountedAt.current));
     const timer = setTimeout(recoverIfBlank, wait);
     return () => clearTimeout(timer);
   }, [active, recoverIfBlank]);
+
+  useEffect(() => {
+    if (!tab.loading) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      dispatch({ type: 'UPDATE_TAB', id: tab.id, patch: { loading: false } });
+    }, 12000);
+    return () => clearTimeout(timer);
+  }, [tab.loading, tab.id, dispatch]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -411,7 +421,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent={`Zenith/0.4.8 zp:${tab.profileId || 'profile-utama'}`}
+        applicationNameForUserAgent={`Zenith/0.4.9 zp:${tab.profileId || 'profile-utama'}`}
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

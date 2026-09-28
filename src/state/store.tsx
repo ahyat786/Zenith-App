@@ -44,7 +44,7 @@ import { flushCookies, readStateBackup, restoreCookieSnapshot, restorePrimaryCoo
 import { adblockAllowHost, adblockInit, adblockSetEnabled, expandSearch, normalizeInput } from '../core/native';
 import { setFastDownloadsEnabled } from '../core/downloads';
 import { isNewTabUrl } from '../browser/newtab';
-import { canonicalUrl, clearFreshTab, freshTabId, holdBlankTab, noteFreshTab, pendingNavigationUrl, releaseBlankTab } from '../browser/navIntent';
+import { canonicalUrl, clearFreshTab, freshTabId, holdBlankTab, lockTabUrls, noteFreshTab, pendingNavigationUrl, releaseBlankTab, tabUrlLocked, unlockTabUrl } from '../browser/navIntent';
 
 const STATE_KEY = 'zenith.state.v1';
 const BACKUP_KEY = 'zenith.state.backup.v1';
@@ -366,6 +366,9 @@ function reducer(state: AppState, action: Action): AppState {
         activeTabId: null,
       };
     case 'SET_ACTIVE_TAB':
+      if (action.id) {
+        unlockTabUrl(action.id);
+      }
       if (action.id !== freshTabId()) {
         clearFreshTab();
       }
@@ -385,10 +388,14 @@ function reducer(state: AppState, action: Action): AppState {
       if (current && nextUrl && nextUrl !== current.url) {
         const pending = pendingNavigationUrl(action.id);
         const samePending = !!pending && canonicalUrl(nextUrl) === canonicalUrl(pending);
-        const sameHost = !!pending && hostOfUrl(nextUrl) === hostOfUrl(pending);
+        const copiesOther = state.tabs.some(
+          (t) => t.id !== action.id && !!t.url && !isNewTabUrl(t.url) && canonicalUrl(t.url) === canonicalUrl(nextUrl),
+        );
         const reject =
-          (isNewTabUrl(current.url) && !samePending && !sameHost) ||
-          (!!pending && !samePending && !sameHost);
+          tabUrlLocked(action.id) ||
+          (isNewTabUrl(current.url) && !samePending) ||
+          (!!pending && !samePending) ||
+          (copiesOther && !samePending);
         if (reject) {
           const rest = { ...patch };
           delete rest.url;
@@ -453,6 +460,9 @@ function reducer(state: AppState, action: Action): AppState {
       const next = pinned ?? first;
       if (!next || next.id !== freshTabId()) {
         clearFreshTab();
+      }
+      if (next && next.id !== freshTabId()) {
+        unlockTabUrl(next.id);
       }
       return {
         ...state,
@@ -954,6 +964,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const id = opts?.id ?? uid('t-');
       if (opts?.activate !== false) {
         if (isNewTabUrl(url)) {
+          lockTabUrls(getAppState().tabs.map((t) => t.id));
           holdBlankTab();
           noteFreshTab(id);
         } else {

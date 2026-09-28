@@ -42,7 +42,7 @@ class ZenithWebViewManager : RNCWebViewManager() {
         if (idx >= 0) {
             ZenithPrivate.noteProfile(view.webView, raw.substring(idx + marker.length).trim())
             val ua = raw.substring(0, idx).trim()
-            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.4.8" else ua)
+            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.4.9" else ua)
         } else {
             super.setApplicationNameForUserAgent(view, value)
         }
@@ -53,6 +53,9 @@ class ZenithWebViewManager : RNCWebViewManager() {
      * sebelum permintaan pertama. Profil utama tidak dipindah ke ProfileStore.
      */
     override fun setNewSource(view: RNCWebViewWrapper, source: ReadableMap?) {
+        view.webView.translationX = 0f
+        view.webView.alpha = 1f
+        view.webView.visibility = android.view.View.VISIBLE
         view.webView.post {
             if (!ZenithPrivate.hasProfileHint(view.webView)) {
                 view.webView.post {
@@ -76,26 +79,31 @@ class ZenithWebViewManager : RNCWebViewManager() {
     }
 
     private fun loadSource(view: RNCWebViewWrapper, source: ReadableMap?) {
-        super.setNewSource(view, source)
         val uri = try {
             if (source != null && source.hasKey("uri")) source.getString("uri") else null
         } catch (_: Throwable) {
             null
-        } ?: return
-        if (uri.isBlank() || uri == "about:blank" || uri.startsWith("zenith:")) {
+        }
+        if (!uri.isNullOrBlank() && uri != "about:blank" && !uri.startsWith("zenith:")) {
+            view.webView.setTag(ZenithWebViewClient.EXPECTED_URL, uri)
+        }
+        super.setNewSource(view, source)
+        if (uri.isNullOrBlank() || uri == "about:blank" || uri.startsWith("zenith:")) {
             return
         }
+        // Sekali per URL. Mengulang loadUrl setiap navigasi membuat refresh berputar terus.
+        val forced = view.webView.getTag(ZenithWebViewClient.FORCED_URI) as? String
+        if (forced == uri) {
+            return
+        }
+        view.webView.setTag(ZenithWebViewClient.FORCED_URI, uri)
         val current = try {
             view.webView.url
         } catch (_: Throwable) {
             null
         }
-        // View daur ulang bisa menolak loadUrl jika URL-nya sudah sama, atau tetap
-        // menampilkan dokumen tab sebelumnya. Kosongkan riwayat lalu muat ulang.
-        if (current != uri) {
+        if (!current.isNullOrBlank() && current != uri) {
             try {
-                view.webView.stopLoading()
-                view.webView.clearHistory()
                 view.webView.loadUrl(uri)
             } catch (_: Throwable) {
             }

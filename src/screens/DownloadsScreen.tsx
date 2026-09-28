@@ -8,7 +8,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
-import { Button, EmptyState, ListSection, Row, TextField } from '../ui/kit';
+import { Button, EmptyState, IconButton, ListSection, Row, TextField } from '../ui/kit';
 import { Icon } from '../ui/Icon';
 import {
   cancelDownload,
@@ -73,6 +73,8 @@ export function DownloadsScreen() {
   const theme = useTheme(state.settings.theme);
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
   const [url, setUrl] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
 
   const refresh = useCallback(async () => {
     setJobs(await listDownloads());
@@ -87,10 +89,14 @@ export function DownloadsScreen() {
 
   const back = () => dispatch({ type: 'SET_SCREEN', screen: 'browser' });
 
-  const active = jobs.filter((j) => j.status === 'connecting' || j.status === 'downloading');
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? jobs.filter((j) => `${j.filename} ${j.url}`.toLowerCase().includes(q))
+    : jobs;
+  const active = shown.filter((j) => j.status === 'connecting' || j.status === 'downloading');
   const failed = useMemo(() => {
     const latest = new Map<string, DownloadJob>();
-    for (const job of jobs) {
+    for (const job of shown) {
       if (job.status !== 'error' && job.status !== 'canceled') {
         continue;
       }
@@ -101,8 +107,8 @@ export function DownloadsScreen() {
       }
     }
     return [...latest.values()];
-  }, [jobs]);
-  const done = jobs.filter((j) => j.status === 'done');
+  }, [shown]);
+  const done = shown.filter((j) => j.status === 'done');
   const grouped = useMemo(() => {
     const map = new Map<DownloadCategory, DownloadJob[]>();
     for (const job of done) {
@@ -159,7 +165,29 @@ export function DownloadsScreen() {
   };
 
   return (
-    <ScreenShell title="Unduhan" onBack={back} theme={theme}>
+    <ScreenShell
+      title="Unduhan"
+      onBack={back}
+      theme={theme}
+      right={
+        <IconButton
+          name={searchOpen ? 'close' : 'search'}
+          theme={theme}
+          onPress={() => {
+            setSearchOpen((open) => {
+              if (open) {
+                setQuery('');
+              }
+              return !open;
+            });
+          }}
+        />
+      }>
+      {searchOpen ? (
+        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md }}>
+          <TextField theme={theme} value={query} onChangeText={setQuery} placeholder="Cari berkas atau URL" />
+        </View>
+      ) : null}
       {!downloadsAvailable ? (
         <EmptyState
           theme={theme}

@@ -26,7 +26,7 @@ import { fetchSuggestions, fuzzyScore } from '../core/suggest';
 import { getWebView } from './refs';
 import { isNewTabUrl } from './newtab';
 import { noteBackHandled } from './backStack';
-import { beginTabNavigation, commitNavigation, freshTabId, otherTabUrls, releaseBlankTab } from './navIntent';
+import { beginTabNavigation, commitNavigation, freshTabId, otherTabUrls, releaseBlankTab, tabUrlLocked } from './navIntent';
 import { Icon, type IconName } from '../ui/Icon';
 
 interface SuggestionRow {
@@ -87,16 +87,16 @@ export function Omnibox({ theme }: { theme: Theme }) {
       return;
     }
     const snappedFresh = freshTab && isNewTabUrl(freshTab.url) ? freshTab : null;
-    // Tab baru selalu menang. Jangan kirim pencarian ke tab yang tadi terbuka.
+    // Tab baru selalu menang. Jangan timpa URL tab yang tadi terbuka.
     let target = snappedFresh;
-    if (omnibox.mode === 'new') {
+    if (omnibox.mode === 'new' || (activeNow && tabUrlLocked(activeNow.id) && !snappedFresh)) {
       target = null;
     } else if (!target && activeNow && isNewTabUrl(activeNow.url)) {
       target = activeNow;
-    } else if (!target) {
+    } else if (!target && activeNow && !tabUrlLocked(activeNow.id)) {
       target = activeNow;
     }
-    if (!target) {
+    if (!target || tabUrlLocked(target.id)) {
       const id = openNewTab(url, { incognito: omnibox.incognito || !!activeNow?.incognito });
       commitNavigation(id, url, null, otherTabUrls(latest.tabs, id, url));
     } else if (isNewTabUrl(target.url) || url !== target.url) {

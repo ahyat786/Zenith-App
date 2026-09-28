@@ -16,6 +16,37 @@ import java.io.InputStream
  * pengguna dapat mematikan pemblokiran per-situs dari Pengaturan Situs.
  */
 class ZenithWebViewClient : RNCWebViewClient() {
+    companion object {
+        const val EXPECTED_URL = 0x5e417001
+        const val FORCED_URI = 0x5e417002
+        const val CORRECTED = 0x5e417003
+    }
+
+
+    override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+        val expected = view.getTag(EXPECTED_URL) as? String
+        val corrected = view.getTag(CORRECTED) as? String
+        if (
+            !expected.isNullOrBlank() &&
+            url.isNotEmpty() &&
+            corrected != expected &&
+            !sameDocument(url, expected) &&
+            hostOf(url) != hostOf(expected) &&
+            !url.startsWith("about:") &&
+            !url.startsWith("zenith:")
+        ) {
+            view.setTag(CORRECTED, expected)
+            view.post {
+                try {
+                    view.stopLoading()
+                    view.loadUrl(expected)
+                } catch (_: Throwable) {
+                }
+            }
+            return
+        }
+        super.onPageStarted(view, url, favicon)
+    }
 
     override fun shouldInterceptRequest(
         view: WebView,
@@ -41,6 +72,21 @@ class ZenithWebViewClient : RNCWebViewClient() {
      * Stream yang melempar membuat pemuatan gagal (setara ditolak jaringan),
      * sehingga tes host, gambar iklan, dan skrip umpan terhitung terblokir.
      */
+    private fun hostOf(url: String): String {
+        return try {
+            android.net.Uri.parse(url).host?.removePrefix("www.")?.lowercase() ?: ""
+        } catch (_: Throwable) {
+            ""
+        }
+    }
+
+    private fun sameDocument(a: String, b: String): Boolean {
+        if (a == b) {
+            return true
+        }
+        return a.trimEnd('/') == b.trimEnd('/')
+    }
+
     private fun blockedResponse(): WebResourceResponse =
         WebResourceResponse(
             "text/plain",

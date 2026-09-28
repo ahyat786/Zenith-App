@@ -127,6 +127,7 @@ export function BrowserScreen() {
   // ---------- banner unduhan ----------
   // error/canceled tidak boleh menempel. X atau 0-byte yang macet disembunyikan.
   const dismissedBanner = useRef<string | null>(null);
+  const lastReloadAt = useRef(0);
   useEffect(() => {
     const unsub = subscribeDownloads((job) => {
       if (job.status === 'downloading' || job.status === 'connecting') {
@@ -237,7 +238,9 @@ export function BrowserScreen() {
   // ---------- aksi ----------
   const openOmniboxNew = (incognito = false) =>
     dispatch({ type: 'SET_OMNIBOX', patch: { open: true, mode: 'new', initial: '', incognito } });
+  const [forceBlank, setForceBlank] = useState(false);
   const openFreshTab = (incognito = false) => {
+    setForceBlank(true);
     openNewTab(NEW_TAB_URL, { incognito });
     if (incognito) {
       ToastAndroid.show('Mode privat — riwayat tidak disimpan', ToastAndroid.SHORT);
@@ -248,7 +251,13 @@ export function BrowserScreen() {
   );
   const freshOpenId = freshOpen ? freshOpen.id : null;
   const onNewTabPage =
-    blankTabHeld() || freshOpenId != null || !activeTab || isNewTabUrl(activeTab?.url);
+    forceBlank || blankTabHeld() || freshOpenId != null || !activeTab || isNewTabUrl(activeTab?.url);
+  useEffect(() => {
+    if (forceBlank && !blankTabHeld() && freshOpenId == null) {
+      setForceBlank(false);
+    }
+  }, [forceBlank, state.activeTabId, freshOpenId]);
+  backRef.current.canGoBack = !!activeTab?.canGoBack && !onNewTabPage;
   const openOmniboxEdit = () =>
     dispatch({
       type: 'SET_OMNIBOX',
@@ -541,13 +550,13 @@ export function BrowserScreen() {
         disabled={!activeTab?.canGoForward}
         onPress={() => activeTab && getWebView(activeTab.id)?.goForward()}
       />
-      {/* Refresh / Stop */}
+      {/* Refresh / Stop — satu ketukan, tidak mengulang sendiri */}
       <IconButton
         name={activeTab?.loading ? 'close' : 'refresh'}
         theme={theme}
-        disabled={!activeTab}
+        disabled={!activeTab || onNewTabPage}
         onPress={() => {
-          if (!activeTab) {
+          if (!activeTab || onNewTabPage) {
             return;
           }
           const wv = getWebView(activeTab.id);
@@ -556,9 +565,15 @@ export function BrowserScreen() {
           }
           if (activeTab.loading) {
             wv.stopLoading();
-          } else {
-            wv.reload();
+            dispatch({ type: 'UPDATE_TAB', id: activeTab.id, patch: { loading: false } });
+            return;
           }
+          const now = Date.now();
+          if (now - lastReloadAt.current < 1200) {
+            return;
+          }
+          lastReloadAt.current = now;
+          wv.reload();
         }}
       />
       <Pressable
@@ -956,7 +971,17 @@ export function BrowserScreen() {
         onBack={() => activeTab && getWebView(activeTab.id)?.goBack()}
         onForward={() => activeTab && getWebView(activeTab.id)?.goForward()}
         onShare={() => activeTab?.url && !isNewTabUrl(activeTab.url) && Share.share({ message: activeTab.url }).catch(() => {})}
-        onReload={() => activeTab && getWebView(activeTab.id)?.reload()}
+        onReload={() => {
+          if (!activeTab || onNewTabPage) {
+            return;
+          }
+          const now = Date.now();
+          if (now - lastReloadAt.current < 1200) {
+            return;
+          }
+          lastReloadAt.current = now;
+          getWebView(activeTab.id)?.reload();
+        }}
         onBookmark={toggleBookmark}
         onToggleDesktop={toggleDesktopMode}
         onFind={findInPage}
