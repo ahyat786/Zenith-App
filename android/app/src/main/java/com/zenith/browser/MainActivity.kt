@@ -32,10 +32,6 @@ class MainActivity : ReactActivity() {
     super.onResume()
     // Setelah lama di latar, timer dan permukaan WebView sering mati.
     // Tanpa onResume halaman tetap putih meski URL tab masih tersimpan.
-    try {
-      WebView.resumeTimers()
-    } catch (_: Throwable) {
-    }
     window?.decorView?.let { root ->
       forEachWebView(root) { webView ->
         try {

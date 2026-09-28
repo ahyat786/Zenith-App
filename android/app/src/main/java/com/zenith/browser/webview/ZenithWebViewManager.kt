@@ -26,8 +26,8 @@ class ZenithWebViewManager : RNCWebViewManager() {
         val view = super.createViewInstance(reactContext)
         // State tersimpan Android bisa mengembalikan URL tanpa isi. RN lalu
         // melewatkan loadUrl karena URL-nya sama, dan tab terbuka putih.
-        view.webView.saveEnabled = false
-        view.webView.isSaveFromParentEnabled = false
+        view.webView.setSaveEnabled(false)
+        view.webView.setSaveFromParentEnabled(false)
         return view
     }
 
