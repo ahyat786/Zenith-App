@@ -30,6 +30,7 @@ import { GlanceView } from './GlanceView';
 import { FirefoxMenu } from './FirefoxMenu';
 import { NewTabPage } from './NewTabPage';
 import { getWebView } from './refs';
+import { consumeHardwareBack } from './backStack';
 import { NEW_TAB_URL, isNewTabUrl } from './newtab';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, IconButton, Row, Sheet, ToggleRow, type SheetAction } from '../ui/kit';
@@ -160,8 +161,26 @@ export function BrowserScreen() {
   }, [privateCount, state.hydrated]);
 
   // ---------- tombol fisik kembali ----------
+  // Menu, sheet, dan layar overlay ditutup dulu. Tab tidak pernah ditutup
+  // oleh tombol kembali — kalau tidak ada yang ditutup dan halaman tidak
+  // punya riwayat, Android yang keluar dari aktivitas. Daftar tab tetap.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (consumeHardwareBack()) {
+        return true;
+      }
+      if (menuOpen) {
+        setMenuOpen(false);
+        return true;
+      }
+      if (shieldsOpen) {
+        setShieldsOpen(false);
+        return true;
+      }
+      if (profilesOpen) {
+        setProfilesOpen(false);
+        return true;
+      }
       const ui = state.ui;
       if (ui.omnibox.open) {
         dispatch({ type: 'SET_OMNIBOX', patch: { open: false } });
@@ -183,18 +202,18 @@ export function BrowserScreen() {
         dispatch({ type: 'SET_UI', patch: { compact: false } });
         return true;
       }
-      if (activeTab?.canGoBack) {
-        getWebView(activeTab.id)?.goBack();
+      if (ui.screen !== 'browser') {
+        dispatch({ type: 'SET_SCREEN', screen: 'browser' });
         return true;
       }
-      if (activeTab) {
-        dispatch({ type: 'CLOSE_TAB', id: activeTab.id });
+      if (activeTab?.canGoBack) {
+        getWebView(activeTab.id)?.goBack();
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [state.ui, activeTab, dispatch]);
+  }, [state.ui, activeTab, dispatch, menuOpen, shieldsOpen, profilesOpen]);
 
   // ---------- aksi ----------
   const openOmniboxNew = (incognito = false) =>
@@ -818,7 +837,7 @@ export function BrowserScreen() {
               <Icon name="download" size={18} color={theme.accent} />
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text numberOfLines={1} style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
-                  {download.done === 0 ? 'Menghubungkan…' : download.filename}
+                  {download.filename || 'Mengunduh…'}
                 </Text>
                 <View style={{ height: 4, backgroundColor: theme.surface2, borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
                   <View

@@ -13,6 +13,7 @@ import React, {
   useReducer,
   useRef,
 } from 'react';
+import { AppState as RNAppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   Bookmark,
@@ -39,11 +40,39 @@ import {
   uid,
   workspacesForProfile,
 } from './defaults';
-import { setActiveBrowserProfile } from '../core/native';
+import { flushCookies, readStateBackup, restorePrimaryCookies, setActiveBrowserProfile, writeStateBackup } from '../core/native';
 import { adblockAllowHost, adblockInit, adblockSetEnabled, expandSearch, normalizeInput } from '../core/native';
 import { setFastDownloadsEnabled } from '../core/downloads';
 
 const STATE_KEY = 'zenith.state.v1';
+const BACKUP_KEY = 'zenith.state.backup.v1';
+
+function tryParseState(raw: string | null): Partial<AppState> | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    const value = JSON.parse(raw);
+    return value && typeof value === 'object' ? (value as Partial<AppState>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function stateScore(data: Partial<AppState> | null | undefined): number {
+  if (!data) {
+    return 0;
+  }
+  return (
+    (data.tabs?.length ?? 0) * 4 +
+    (data.bookmarks?.length ?? 0) * 3 +
+    (data.history?.length ?? 0) +
+    (data.scripts?.length ?? 0) +
+    (data.extensions?.length ?? 0) +
+    (data.profiles?.length ?? 0) +
+    Object.keys(data.siteConfigs ?? {}).length
+  );
+}
 
 export interface AppState {
   hydrated: boolean;
@@ -639,20 +668,48 @@ const StoreContext = createContext<StoreApi | null>(null);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // Jangan timpa blob yang gagal dibaca dengan state kosong.
+  const persistAllowed = useRef(false);
+  const cookiesRestored = useRef(false);
+
+  const persistNow = useCallback((snapshot: AppState) => {
+    if (!snapshot.hydrated || !persistAllowed.current) {
+      return;
+    }
+    const { ui, hydrated, splitTabIds, ...persist } = snapshot;
+    const text = JSON.stringify(persist);
+    AsyncStorage.multiSet([
+      [STATE_KEY, text],
+      [BACKUP_KEY, text],
+    ]).catch(() => {});
+    writeStateBackup(text).catch(() => {});
+  }, []);
 
   // ---- hidrasi sekali di awal
   useEffect(() => {
     let alive = true;
     (async () => {
-      let persisted: Partial<AppState> | null = null;
+      let raw: string | null = null;
+      let backupRaw: string | null = null;
+      let fileRaw: string | null = null;
       try {
-        const raw = await AsyncStorage.getItem(STATE_KEY);
-        if (raw) {
-          persisted = JSON.parse(raw);
-        }
+        const pair = await AsyncStorage.multiGet([STATE_KEY, BACKUP_KEY]);
+        raw = pair[0]?.[1] ?? null;
+        backupRaw = pair[1]?.[1] ?? null;
       } catch {
-        persisted = null;
+        raw = null;
+        backupRaw = null;
       }
+      fileRaw = await readStateBackup();
+      const candidates = [tryParseState(raw), tryParseState(backupRaw), tryParseState(fileRaw)].filter(
+        (item): item is Partial<AppState> => item != null,
+      );
+      candidates.sort((a, b) => stateScore(b) - stateScore(a));
+      const persisted = candidates[0] ?? null;
+      const sawBlob = [raw, backupRaw, fileRaw].some((item) => !!item && item.length > 2);
+      persistAllowed.current = persisted != null || !sawBlob;
       if (alive) {
         const id =
           persisted?.activeProfileId && persisted.profiles?.some((p) => p.id === persisted.activeProfileId)
@@ -669,7 +726,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // ---- simpan (debounce)
+  // ---- simpan (debounce) + flush saat aplikasi pergi ke latar
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!state.hydrated) {
@@ -679,15 +736,51 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(saveTimer.current);
     }
     saveTimer.current = setTimeout(() => {
-      const { ui, hydrated, splitTabIds, ...persist } = state;
-      AsyncStorage.setItem(STATE_KEY, JSON.stringify(persist)).catch(() => {});
+      persistNow(stateRef.current);
     }, 1200);
     return () => {
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
       }
     };
-  }, [state]);
+  }, [state, persistNow]);
+
+  useEffect(() => {
+    const sub = RNAppState.addEventListener('change', (next) => {
+      if (next === 'background' || next === 'inactive') {
+        if (saveTimer.current) {
+          clearTimeout(saveTimer.current);
+        }
+        persistNow(stateRef.current);
+        flushCookies().catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, [persistNow]);
+
+  useEffect(() => {
+    if (!state.hydrated || cookiesRestored.current) {
+      return;
+    }
+    cookiesRestored.current = true;
+    const urls = new Set<string>();
+    for (const tab of state.tabs) {
+      if (tab.url) {
+        urls.add(tab.url);
+      }
+    }
+    for (const item of state.history) {
+      if (item.url) {
+        urls.add(item.url);
+      }
+    }
+    for (const item of state.bookmarks) {
+      if (item.url) {
+        urls.add(item.url);
+      }
+    }
+    restorePrimaryCookies([...urls]).catch(() => {});
+  }, [state.hydrated, state.tabs, state.history, state.bookmarks]);
 
   // ---- sinkronisasi mesin adblock (Rust)
   useEffect(() => {
@@ -791,11 +884,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const apiDispatch = useCallback((action: Action) => {
+    if (action.type === 'RESET_ALL') {
+      persistAllowed.current = true;
+    }
+    dispatch(action);
+  }, []);
+
   const value = useMemo<StoreApi>(
     () => ({
       state: view,
       fullState: state,
-      dispatch,
+      dispatch: apiDispatch,
       switchProfile,
       activeTab,
       activeEngine,
@@ -804,7 +904,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       resolveInput,
       openNewTab,
     }),
-    [view, state, switchProfile, activeTab, activeEngine, tabsInWorkspace, siteConfigFor, resolveInput, openNewTab],
+    [view, state, apiDispatch, switchProfile, activeTab, activeEngine, tabsInWorkspace, siteConfigFor, resolveInput, openNewTab],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

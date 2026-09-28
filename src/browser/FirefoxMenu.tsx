@@ -6,6 +6,7 @@
  */
 
 import React, { useState } from 'react';
+import { useHardwareBack } from './backStack';
 import {
   Modal,
   Pressable,
@@ -76,8 +77,30 @@ export function FirefoxMenu(props: Props) {
     setTimeout(fn, 40);
   };
 
+  const closeNested = () => {
+    if (findOpen) {
+      setFindOpen(false);
+      return true;
+    }
+    if (extOpen) {
+      setExtOpen(false);
+      return true;
+    }
+    if (moreOpen) {
+      setMoreOpen(false);
+      return true;
+    }
+    return false;
+  };
+
+  useHardwareBack(visible, () => closeNested());
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={() => {
+      if (!closeNested()) {
+        onClose();
+      }
+    }}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: theme.overlay }]} onPress={onClose} />
         <View

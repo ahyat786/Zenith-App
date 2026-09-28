@@ -25,6 +25,7 @@ import {
 import { parseExtensionManifest } from '../core/native';
 import { EXAMPLE_EXTENSIONS } from '../core/examples';
 import type { Extension } from '../types';
+import { useHardwareBack } from '../browser/backStack';
 
 const MAX_FILES = 40;
 const MAX_TOTAL_BYTES = 4 * 1024 * 1024;
@@ -39,6 +40,22 @@ export function ExtensionsScreen() {
   const [detail, setDetail] = useState<Extension | null>(null);
 
   const back = () => dispatch({ type: 'SET_SCREEN', screen: 'browser' });
+
+  useHardwareBack(true, () => {
+    if (importOpen) {
+      setImportOpen(false);
+      return true;
+    }
+    if (detail) {
+      setDetail(null);
+      return true;
+    }
+    if (addOpen) {
+      setAddOpen(false);
+      return true;
+    }
+    return false;
+  });
 
   const installFromZipData = async (data: ArrayBuffer, sourceName: string) => {
     const zip = await JSZip.loadAsync(data);

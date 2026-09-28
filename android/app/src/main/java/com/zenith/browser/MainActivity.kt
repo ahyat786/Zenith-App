@@ -1,6 +1,7 @@
 package com.zenith.browser
 
 import android.os.Bundle
+import android.webkit.CookieManager
 import androidx.core.view.WindowCompat
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -14,6 +15,15 @@ class MainActivity : ReactActivity() {
    * rendering of the component.
    */
   override fun getMainComponentName(): String = "Zenith"
+
+  override fun onPause() {
+    super.onPause()
+    // Update mematikan proses. Kuki yang belum di-flush hilang dari disk.
+    try {
+      CookieManager.getInstance().flush()
+    } catch (_: Throwable) {
+    }
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)

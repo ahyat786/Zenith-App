@@ -24,6 +24,7 @@ import {
 } from '../ui/kit';
 import { adblockInit, adblockResetStats, adblockStats, openPrivateDnsSettings, type AdblockStats } from '../core/native';
 import { uid } from '../state/defaults';
+import { useHardwareBack } from '../browser/backStack';
 import type { SearchEngine } from '../types';
 import {
   DNS_PRESETS,
@@ -54,6 +55,26 @@ export function SettingsScreen() {
   const [testHost, setTestHost] = useState('google.com');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<DnsTestResult | null>(null);
+
+  useHardwareBack(true, () => {
+    if (picker) {
+      setPicker(null);
+      return true;
+    }
+    if (addEngine) {
+      setAddEngine(false);
+      return true;
+    }
+    if (importList) {
+      setImportList(false);
+      return true;
+    }
+    if (panel !== 'home') {
+      setPanel('home');
+      return true;
+    }
+    return false;
+  });
 
   const setDns = (patch: Partial<typeof dns>) =>
     dispatch({ type: 'SET_SETTINGS', patch: { dns: { ...dns, ...patch } } });
@@ -166,7 +187,7 @@ export function SettingsScreen() {
     { id: 'data', title: 'Data', subtitle: `${state.history.length} riwayat`, panel: 'data' },
     { id: 'sandi', title: 'Sandi', subtitle: 'Tidak disimpan di Zenith', screen: 'passwords' },
     { id: 'unduh', title: 'Unduhan', subtitle: 'Riwayat berkas', screen: 'downloads' },
-    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.4.4', screen: 'about' },
+    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.4.5', screen: 'about' },
   ];
   const panelTitle: Record<SettingsPanel, string> = {
     home: 'Pengaturan',

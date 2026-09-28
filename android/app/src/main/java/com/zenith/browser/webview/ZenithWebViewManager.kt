@@ -21,24 +21,42 @@ class ZenithWebViewManager : RNCWebViewManager() {
      * lalu tab privat tetap berbagi kuki dengan tab biasa.
      */
     override fun createViewInstance(reactContext: ThemedReactContext): RNCWebViewWrapper {
-        val view = super.createViewInstance(reactContext)
-        ZenithPrivate.bind(view.webView, false)
-        return view
+        // Jangan setProfile di sini. Profil tab belum diketahui, dan profil
+        // utama harus tetap di toples bawaan supaya akun tidak hilang.
+        return super.createViewInstance(reactContext)
     }
 
     override fun setIncognito(view: RNCWebViewWrapper, value: Boolean) {
         ZenithPrivate.bind(view.webView, value)
     }
 
+    override fun setApplicationNameForUserAgent(view: RNCWebViewWrapper, value: String?) {
+        val raw = value ?: ""
+        val marker = " zp:"
+        val idx = raw.lastIndexOf(marker)
+        if (idx >= 0) {
+            ZenithPrivate.noteProfile(view.webView, raw.substring(idx + marker.length).trim())
+            val ua = raw.substring(0, idx).trim()
+            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.4.5" else ua)
+        } else {
+            super.setApplicationNameForUserAgent(view, value)
+        }
+    }
+
     /**
-     * Tunda muat satu putaran UI agar setIncognito sempat memasang profil
-     * sebelum permintaan pertama. Tanpa ini, source bisa memuat di toples kuki normal.
+     * Tunda muat satu putaran UI agar profil tab dan mode privat terpasang
+     * sebelum permintaan pertama. Profil utama tidak dipindah ke ProfileStore.
      */
     override fun setNewSource(view: RNCWebViewWrapper, source: ReadableMap?) {
         view.webView.post {
-            if (ZenithPrivate.isPrivate(view.webView)) {
-                ZenithPrivate.bind(view.webView, true)
+            if (!ZenithPrivate.hasProfileHint(view.webView)) {
+                view.webView.post {
+                    ZenithPrivate.ensureBeforeLoad(view.webView)
+                    loadSource(view, source)
+                }
+                return@post
             }
+            ZenithPrivate.ensureBeforeLoad(view.webView)
             loadSource(view, source)
         }
     }

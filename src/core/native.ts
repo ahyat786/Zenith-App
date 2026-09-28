@@ -42,6 +42,10 @@ interface ZenithCoreNative {
   privateProfileSupported(): Promise<boolean>;
   clearPrivateSession(): Promise<boolean>;
   setActiveBrowserProfile(profileId: string): Promise<boolean>;
+  readStateBackup(): Promise<string | null>;
+  writeStateBackup(json: string): Promise<boolean>;
+  flushCookies(): Promise<boolean>;
+  restorePrimaryCookies(urls: string[]): Promise<boolean>;
 }
 
 const ZC = NativeModules.ZenithCore as ZenithCoreNative | undefined;
@@ -354,6 +358,41 @@ export async function setActiveBrowserProfile(profileId: string): Promise<void> 
     await ZC?.setActiveBrowserProfile(profileId);
   } catch {
     // perangkat tanpa modul native tetap memisahkan data aplikasi
+  }
+}
+
+export async function readStateBackup(): Promise<string | null> {
+  try {
+    return (await ZC?.readStateBackup()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeStateBackup(json: string): Promise<void> {
+  try {
+    await ZC?.writeStateBackup(json);
+  } catch {
+    // cadangan berkas opsional
+  }
+}
+
+export async function flushCookies(): Promise<void> {
+  try {
+    await ZC?.flushCookies();
+  } catch {
+    // CookieManager mungkin belum siap
+  }
+}
+
+export async function restorePrimaryCookies(urls: string[]): Promise<void> {
+  try {
+    if (urls.length === 0) {
+      return;
+    }
+    await ZC?.restorePrimaryCookies(urls.slice(0, 400));
+  } catch {
+    // toples lama mungkin tidak ada
   }
 }
 

@@ -27,6 +27,7 @@ import { NEW_TAB_URL, isNewTabUrl } from './newtab';
 import { WORKSPACE_ICONS, uid } from '../state/defaults';
 import { Icon } from '../ui/Icon';
 import { ActionSheet, Button, TextField, type SheetAction } from '../ui/kit';
+import { useHardwareBack } from './backStack';
 
 const GROUP_COLORS = ['#8b7cf6', '#60a5fa', '#4ade80', '#fbbf24', '#f472b6', '#f87171'];
 
@@ -68,6 +69,26 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
 
   const open = state.ui.tabSwitcher;
   const close = () => dispatch({ type: 'SET_UI', patch: { tabSwitcher: false } });
+  const closeNested = () => {
+    if (newGroupOpen) {
+      setNewGroupOpen(false);
+      return true;
+    }
+    if (manageWs) {
+      setManageWs(false);
+      return true;
+    }
+    if (ctxTab) {
+      setCtxTab(null);
+      return true;
+    }
+    if (ctxGroup) {
+      setCtxGroup(null);
+      return true;
+    }
+    return false;
+  };
+  useHardwareBack(open, () => closeNested());
 
   const wsTabs = state.tabs.filter((t) => t.workspaceId === state.activeWorkspaceId);
   const showAll = wsTabs.length === 0 && state.tabs.length > 0;
@@ -247,7 +268,15 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
   const freshUngrouped = ungrouped.filter((t) => !isStale(t));
 
   return (
-    <Modal visible animationType="slide" onRequestClose={close} statusBarTranslucent>
+    <Modal
+      visible
+      animationType="slide"
+      onRequestClose={() => {
+        if (!closeNested()) {
+          close();
+        }
+      }}
+      statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
         {/* ================= header ================= */}
         <View style={{ paddingHorizontal: spacing.md, paddingBottom: 4 }}>

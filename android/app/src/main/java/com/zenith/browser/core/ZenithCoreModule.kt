@@ -7,7 +7,9 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.module.annotations.ReactModule
+import java.io.File
 
 /**
  * Modul React Native "ZenithCore" — membungkus ZenithCoreJNI (Rust)
@@ -152,5 +154,63 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
     fun setActiveBrowserProfile(profileId: String, promise: Promise) {
         com.zenith.browser.webview.ZenithPrivate.setActive(profileId)
         promise.resolve(true)
+    }
+
+    /** Cadangan state di filesDir. Bertahan saat update, terpisah dari AsyncStorage. */
+    @ReactMethod
+    fun readStateBackup(promise: Promise) {
+        try {
+            val file = File(reactApplicationContext.filesDir, "zenith-state.json")
+            promise.resolve(if (file.exists()) file.readText(Charsets.UTF_8) else null)
+        } catch (_: Throwable) {
+            promise.resolve(null)
+        }
+    }
+
+    @ReactMethod
+    fun writeStateBackup(json: String, promise: Promise) {
+        try {
+            val dir = reactApplicationContext.filesDir
+            val file = File(dir, "zenith-state.json")
+            val tmp = File(dir, "zenith-state.json.tmp")
+            tmp.writeText(json, Charsets.UTF_8)
+            if (!tmp.renameTo(file)) {
+                file.writeText(json, Charsets.UTF_8)
+                tmp.delete()
+            }
+            promise.resolve(true)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun flushCookies(promise: Promise) {
+        com.zenith.browser.webview.ZenithPrivate.flush()
+        promise.resolve(true)
+    }
+
+    /** Pulihkan kuki v0.4.4 yang tersesat di toples Zu, tanpa menimpa toples bawaan. */
+    @ReactMethod
+    fun restorePrimaryCookies(urls: ReadableArray, promise: Promise) {
+        val list = ArrayList<String>(urls.size())
+        for (i in 0 until urls.size()) {
+            if (!urls.isNull(i)) {
+                urls.getString(i)?.let { list.add(it) }
+            }
+        }
+        Thread {
+            try {
+                com.zenith.browser.webview.ZenithPrivate.importMissingCookies(
+                    com.zenith.browser.webview.ZenithPrivate.nameFor(
+                        com.zenith.browser.webview.ZenithPrivate.PRIMARY_ID,
+                        false,
+                    ),
+                    list,
+                )
+            } catch (_: Throwable) {
+            }
+            promise.resolve(true)
+        }.start()
     }
 }

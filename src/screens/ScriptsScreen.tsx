@@ -23,6 +23,7 @@ import { Icon } from '../ui/Icon';
 import { parseUserScript } from '../core/native';
 import { EXAMPLE_SCRIPTS } from '../core/examples';
 import { uid } from '../state/defaults';
+import { useHardwareBack } from '../browser/backStack';
 import type { UserScript } from '../types';
 
 export function ScriptsScreen() {
@@ -35,6 +36,22 @@ export function ScriptsScreen() {
   const [busy, setBusy] = useState(false);
 
   const back = () => dispatch({ type: 'SET_SCREEN', screen: 'browser' });
+
+  useHardwareBack(true, () => {
+    if (importOpen) {
+      setImportOpen(false);
+      return true;
+    }
+    if (addOpen) {
+      setAddOpen(false);
+      return true;
+    }
+    if (editing) {
+      setEditing(null);
+      return true;
+    }
+    return false;
+  });
 
   const importFromUrl = async () => {
     const url = importUrl.trim();

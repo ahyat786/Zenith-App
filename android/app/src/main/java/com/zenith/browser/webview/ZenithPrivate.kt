@@ -11,19 +11,34 @@ import java.util.WeakHashMap
 /**
  * Profil browser terpisah + mode privat.
  * Tidak memanggil CookieManager.removeAllCookies() pada toples global.
- * Setiap profil Zenith memakai ProfileStore sendiri bila WebView mendukungnya.
+ *
+ * Profil utama (profile-utama) tetap di toples bawaan WebView. v0.4.4 memindahkan
+ * semua tab ke ProfileStore "Zu…", sehingga kuki/akun yang sudah tersimpan
+ * terlihat hilang setelah update. Profil tambahan dan mode privat tetap terpisah.
  */
 object ZenithPrivate {
-    @Volatile
-    var activeId: String = "profile-utama"
+    const val PRIMARY_ID = "profile-utama"
 
-    private class Binding(val profileId: String, val incognito: Boolean)
+    @Volatile
+    var activeId: String = PRIMARY_ID
+
+    private class Binding(
+        val profileId: String,
+        val incognito: Boolean,
+        val systemJar: Boolean,
+    )
 
     private val marked = Collections.newSetFromMap(WeakHashMap<WebView, Boolean>())
     private val bound = Collections.synchronizedMap(WeakHashMap<WebView, Binding>())
+    private val wantedId = Collections.synchronizedMap(WeakHashMap<WebView, String>())
 
     fun setActive(id: String) {
-        activeId = id.ifBlank { "utama" }
+        activeId = id.ifBlank { PRIMARY_ID }
+    }
+
+    fun isPrimary(id: String): Boolean {
+        val v = id.ifBlank { PRIMARY_ID }
+        return v == PRIMARY_ID || v == "utama"
     }
 
     fun nameFor(id: String, incognito: Boolean): String {
@@ -31,15 +46,51 @@ object ZenithPrivate {
         return if (incognito) "Zp$safe" else "Zu$safe"
     }
 
-    /** Ikat WebView ke profil aktif. Dipanggil sekali sebelum halaman dimuat. */
+    /** Profil milik tab ini, dari UA marker. Belum mengunci toples. */
+    fun noteProfile(webView: WebView, profileId: String) {
+        wantedId[webView] = profileId.ifBlank { activeId }
+    }
+
+    /**
+     * Catat mode privat. Jangan setProfile di sini bila profil tab belum
+     * diketahui — createViewInstance dulu akan mengunci toples yang salah.
+     */
     fun bind(webView: WebView, incognito: Boolean) {
+        if (incognito) {
+            marked.add(webView)
+        } else {
+            marked.remove(webView)
+        }
+        val id = wantedId[webView] ?: bound[webView]?.profileId
+        if (id != null) {
+            apply(webView, id, incognito)
+        }
+    }
+
+    fun hasProfileHint(webView: WebView): Boolean = wantedId[webView] != null
+
+    /** Pastikan toples yang benar terpasang sebelum permintaan pertama. */
+    fun ensureBeforeLoad(webView: WebView) {
+        val id = wantedId[webView] ?: bound[webView]?.profileId ?: activeId
+        val incognito = isPrivate(webView)
+        apply(webView, id, incognito)
+    }
+
+    private fun apply(webView: WebView, profileId: String, incognito: Boolean) {
+        val id = profileId.ifBlank { activeId }
+        val systemJar = !incognito && isPrimary(id)
         val existing = bound[webView]
-        val profileId = existing?.profileId ?: activeId
-        if (existing != null && existing.incognito == incognito) {
+        if (
+            existing != null &&
+            existing.profileId == id &&
+            existing.incognito == incognito &&
+            existing.systemJar == systemJar
+        ) {
             return
         }
-        bound[webView] = Binding(profileId, incognito)
-        val name = nameFor(profileId, incognito)
+        if (existing != null && !existing.systemJar && systemJar) {
+            return
+        }
         val settings = webView.settings
         settings.domStorageEnabled = true
         if (Build.VERSION.SDK_INT >= 26) {
@@ -56,7 +107,13 @@ object ZenithPrivate {
             marked.remove(webView)
             settings.cacheMode = WebSettings.LOAD_DEFAULT
         }
-        attach(webView, name)
+        if (!systemJar && !attach(webView, nameFor(id, incognito))) {
+            if (incognito) {
+                bound[webView] = Binding(id, true, false)
+            }
+            return
+        }
+        bound[webView] = Binding(id, incognito, systemJar)
     }
 
     fun unmark(webView: WebView) {
@@ -77,10 +134,10 @@ object ZenithPrivate {
 
     fun cookies(webView: WebView?, url: String): String? {
         val binding = webView?.let { bound[it] }
-        val name = binding?.let { nameFor(it.profileId, it.incognito) }
-        if (!name.isNullOrBlank()) {
+        if (binding != null && !binding.systemJar) {
+            val name = nameFor(binding.profileId, binding.incognito)
             profileCookie(name, url)?.let { return it }
-            if (isPrivate(webView)) {
+            if (binding.incognito) {
                 return null
             }
         }
@@ -89,6 +146,50 @@ object ZenithPrivate {
         } catch (_: Throwable) {
             null
         }
+    }
+
+    fun flush() {
+        try {
+            CookieManager.getInstance().flush()
+        } catch (_: Throwable) {
+        }
+    }
+
+    /**
+     * Salin kuki yang hanya ada di toples Zu profil utama (v0.4.4) ke toples
+     * bawaan, bila URL itu belum punya kuki. Tidak menimpa kuki yang sudah ada.
+     */
+    fun importMissingCookies(profileName: String, urls: List<String>) {
+        val cm = CookieManager.getInstance()
+        try {
+            cm.setAcceptCookie(true)
+        } catch (_: Throwable) {
+        }
+        for (url in urls) {
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                continue
+            }
+            val already = try {
+                cm.getCookie(url)
+            } catch (_: Throwable) {
+                null
+            }
+            if (!already.isNullOrBlank()) {
+                continue
+            }
+            val raw = profileCookie(profileName, url) ?: continue
+            for (part in raw.split(';')) {
+                val cookie = part.trim()
+                if (!cookie.contains('=')) {
+                    continue
+                }
+                try {
+                    cm.setCookie(url, cookie)
+                } catch (_: Throwable) {
+                }
+            }
+        }
+        flush()
     }
 
     /** Hapus sesi privat profil yang sedang aktif. Tidak menyentuh profil lain. */
@@ -111,17 +212,19 @@ object ZenithPrivate {
         }
     }
 
-    private fun attach(webView: WebView, name: String) {
-        try {
+    private fun attach(webView: WebView, name: String): Boolean {
+        return try {
             if (!supported()) {
-                return
+                return false
             }
-            val store = profileStore() ?: return
+            val store = profileStore() ?: return false
             store.javaClass.getMethod("getOrCreateProfile", String::class.java).invoke(store, name)
             Class.forName("androidx.webkit.WebViewCompat")
                 .getMethod("setProfile", WebView::class.java, String::class.java)
                 .invoke(null, webView, name)
+            true
         } catch (_: Throwable) {
+            false
         }
     }
 
