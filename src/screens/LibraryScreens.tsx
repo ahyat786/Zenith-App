@@ -9,6 +9,7 @@ import { hostOfUrl, useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import { Button, IconButton, ListSection, Row, TextField } from '../ui/kit';
+import { Icon } from '../ui/Icon';
 import type { HistoryItem } from '../types';
 import { PROFILE_COLORS, uid } from '../state/defaults';
 
