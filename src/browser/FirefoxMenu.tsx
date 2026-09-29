@@ -370,7 +370,7 @@ export function FirefoxMenu(props: Props) {
               <Text style={{ marginLeft: 14, color: ink, fontSize: 16 }}>Pengaturan</Text>
             </Pressable>
           </ScrollView>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
