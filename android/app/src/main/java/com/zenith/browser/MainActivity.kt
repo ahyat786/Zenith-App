@@ -51,8 +51,27 @@ class MainActivity : ReactActivity() {
     moveTaskToBack(true)
   }
 
+  override fun onNewIntent(intent: Intent?) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    handleZenithIntent(intent)
+  }
+
+  private fun handleZenithIntent(intent: Intent?) {
+    val screen = intent?.getStringExtra("screen")
+    if (screen == "downloads") {
+      try {
+        reactInstanceManager?.currentReactContext
+          ?.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+          ?.emit("ZenithNavigateScreen", "downloads")
+      } catch (_: Throwable) {
+      }
+    }
+  }
+
   override fun onStart() {
     super.onStart()
+    handleZenithIntent(intent)
     try {
       if (
         !askedNotify &&

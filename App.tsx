@@ -12,8 +12,8 @@
  * ErrorBoundary mencegah crash UI mematikan aplikasi.
  */
 
-import React from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, DeviceEventEmitter, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StoreProvider, useStore } from './src/state/store';
 import { useTheme } from './src/theme';
@@ -77,8 +77,17 @@ class ErrorBoundary extends React.Component<EBProps, EBState> {
 }
 
 function AppShell() {
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
   const theme = useTheme(state.settings.theme);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('ZenithNavigateScreen', (screen: string) => {
+      if (screen) {
+        dispatch({ type: 'SET_SCREEN', screen: screen as any });
+      }
+    });
+    return () => sub.remove();
+  }, [dispatch]);
 
   if (!state.hydrated) {
     return (

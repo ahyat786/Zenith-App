@@ -98,6 +98,7 @@ export function TabView({ tab, active, theme }: Props) {
   }, [tab.id, tab.url, sourceUrl]);
 
   const recoverIfBlank = useCallback(() => {
+    // Jangan probe jika tab sedang navigasi atau baru berpindah/tutup tab
     if (pendingNavigationUrl(tab.id)) {
       return;
     }
@@ -105,6 +106,11 @@ export function TabView({ tab, active, theme }: Props) {
       return;
     }
     if (!active) {
+      return;
+    }
+    // Jika tab sudah pernah dimuat dan aktif, JANGAN probe ulang otomatis
+    // karena saat tab lain ditutup, re-render ini menyebabkan reload pada tab aktif!
+    if (loadedOnce.current) {
       return;
     }
     probeBlankWebView(tab.id, tab.url);
@@ -421,7 +427,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent={`Zenith/0.4.9 zp:${tab.profileId || 'profile-utama'}`}
+        applicationNameForUserAgent={`Zenith/0.5.0 zp:${tab.profileId || 'profile-utama'}`}
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

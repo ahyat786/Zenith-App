@@ -5,10 +5,12 @@
  * lalu pengaturan.
  */
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { noteBackHandled, useHardwareBack } from './backStack';
 import {
+  Animated,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -95,6 +97,37 @@ export function FirefoxMenu(props: Props) {
 
   useHardwareBack(visible, () => closeNested());
 
+  const panY = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 5,
+      onPanResponderMove: (_, gesture) => {
+        if (gesture.dy > 0) {
+          panY.setValue(gesture.dy);
+        }
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > 90 || gesture.vy > 0.6) {
+          Animated.timing(panY, {
+            toValue: 500,
+            duration: 180,
+            useNativeDriver: true,
+          }).start(() => {
+            panY.setValue(0);
+            onClose();
+          });
+        } else {
+          Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 4,
+          }).start();
+        }
+      },
+    }),
+  ).current;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={() => {
       noteBackHandled();
@@ -104,18 +137,30 @@ export function FirefoxMenu(props: Props) {
     }}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: theme.overlay }]} onPress={onClose} />
-        <View
+        <Animated.View
           style={{
             maxHeight: '92%',
             backgroundColor: sheet,
             borderTopLeftRadius: 18,
             borderTopRightRadius: 18,
             paddingBottom: Math.max(insets.bottom, 10),
+            transform: [{ translateY: panY }],
           }}>
-          <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 6 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: theme.dark ? '#5b5b66' : theme.border }} />
+          <View
+            {...panResponder.panHandlers}
+            style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 10, width: '100%' }}>
+            <View style={{ width: 42, height: 5, borderRadius: 2.5, backgroundColor: theme.dark ? '#5b5b66' : theme.border }} />
           </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 8 }}>
+          <ScrollView
+            onScroll={(e) => {
+              // Jika di-scroll ke bawah saat berada di paling atas
+              if (e.nativeEvent.contentOffset.y < -40) {
+                onClose();
+              }
+            }}
+            scrollEventThrottle={16}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 8 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 8, marginBottom: 8 }}>
               <NavBtn icon="back" label="Kembali" disabled={!props.canBack} theme={theme} onPress={props.onBack} />
               <NavBtn icon="forward" label="Maju" disabled={!props.canForward} theme={theme} onPress={props.onForward} />

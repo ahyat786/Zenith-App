@@ -24,27 +24,6 @@ class ZenithWebViewClient : RNCWebViewClient() {
 
 
     override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
-        val expected = view.getTag(EXPECTED_URL) as? String
-        val corrected = view.getTag(CORRECTED) as? String
-        if (
-            !expected.isNullOrBlank() &&
-            url.isNotEmpty() &&
-            corrected != expected &&
-            !sameDocument(url, expected) &&
-            hostOf(url) != hostOf(expected) &&
-            !url.startsWith("about:") &&
-            !url.startsWith("zenith:")
-        ) {
-            view.setTag(CORRECTED, expected)
-            view.post {
-                try {
-                    view.stopLoading()
-                    view.loadUrl(expected)
-                } catch (_: Throwable) {
-                }
-            }
-            return
-        }
         super.onPageStarted(view, url, favicon)
     }
 

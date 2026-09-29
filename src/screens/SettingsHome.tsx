@@ -106,11 +106,30 @@ export function SettingsHome({
               paddingVertical: 14,
               backgroundColor: pressed ? theme.surface2 : 'transparent',
               borderBottomWidth: i < visible.length - 1 ? 0 : 0,
+              ...(row.id === 'tentang'
+                ? {
+                    marginHorizontal: spacing.md,
+                    marginBottom: 10,
+                    backgroundColor: theme.surface,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                  }
+                : {}),
             })}>
-            <Text style={{ color: theme.text, fontSize: 16 }}>{row.title}</Text>
-            {row.subtitle ? (
-              <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 2 }}>{row.subtitle}</Text>
-            ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.text, fontSize: 16, fontWeight: row.id === 'tentang' ? '700' : '400' }}>
+                  {row.title}
+                </Text>
+                {row.subtitle ? (
+                  <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 2 }}>{row.subtitle}</Text>
+                ) : null}
+              </View>
+              {row.id === 'tentang' ? (
+                <Icon name="chevronRight" size={18} color={theme.subtext} />
+              ) : null}
+            </View>
           </Pressable>
         ))}
         {visible.length === 0 ? (

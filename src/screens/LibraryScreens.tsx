@@ -139,8 +139,25 @@ export function BookmarksScreen() {
   return (
     <ScreenShell title="Markah" onBack={back} theme={theme}>
       {state.bookmarks.length === 0 ? (
-        <View style={{ padding: spacing.lg }}>
-          <Text style={{ color: theme.subtext }}>Belum ada markah. Tambahkan dari menu halaman.</Text>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, minHeight: 380 }}>
+          <View
+            style={{
+              width: 110,
+              height: 110,
+              borderRadius: 30,
+              backgroundColor: theme.accentSoft,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 20,
+            }}>
+            <Icon name="bookmark" size={54} color={theme.accent} gradient />
+          </View>
+          <Text style={{ color: theme.text, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+            Satukan semua markah favorit Anda
+          </Text>
+          <Text style={{ color: theme.subtext, fontSize: 13.5, textAlign: 'center', maxWidth: 280, lineHeight: 20 }}>
+            Tandai laman web yang Anda sukai dari menu bilah alamat agar dapat dibuka kembali dengan cepat.
+          </Text>
         </View>
       ) : (
         <ListSection title={`${state.bookmarks.length} markah`} theme={theme}>

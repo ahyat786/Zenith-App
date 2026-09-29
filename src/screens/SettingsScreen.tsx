@@ -176,6 +176,7 @@ export function SettingsScreen() {
   const engineName = s.engines.find((e) => e.id === s.defaultEngineId)?.name ?? 'Mesin pencari';
   const themeLabel = s.theme === 'dark' ? 'Gelap' : s.theme === 'light' ? 'Terang' : 'Mengikuti sistem';
   const settingsRows: SettingsRow[] = [
+    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.5.0 · Browser Cepat & Privat', screen: 'about' },
     { id: 'umum', title: 'Umum', subtitle: themeLabel, panel: 'tampilan' },
     { id: 'cari', title: 'Cari', subtitle: engineName, panel: 'cari' },
     { id: 'tab', title: 'Tab', subtitle: s.barPosition === 'top' ? 'Bar di atas' : 'Bar di bawah', panel: 'tab' },
@@ -187,7 +188,6 @@ export function SettingsScreen() {
     { id: 'data', title: 'Data', subtitle: `${state.history.length} riwayat`, panel: 'data' },
     { id: 'sandi', title: 'Sandi', subtitle: 'Tidak disimpan di Zenith', screen: 'passwords' },
     { id: 'unduh', title: 'Unduhan', subtitle: 'Riwayat berkas', screen: 'downloads' },
-    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.4.9', screen: 'about' },
   ];
   const panelTitle: Record<SettingsPanel, string> = {
     home: 'Pengaturan',

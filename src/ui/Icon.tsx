@@ -1,5 +1,5 @@
 import React from 'react';
-import Svg, { Circle, G, Path } from 'react-native-svg';
+import Svg, { Circle, Defs, G, LinearGradient, Path, Stop } from 'react-native-svg';
 
 export type IconName =
   | 'back' | 'forward' | 'home' | 'tabs' | 'shield' | 'shieldOff' | 'lock'
@@ -15,17 +15,22 @@ interface Props {
   size?: number;
   color?: string;
   strokeWidth?: number;
+  gradient?: boolean;
 }
 
 const P = (d: string, key?: string) => <Path key={key} d={d} />;
 
-export function Icon({ name, size = 22, color = '#fff', strokeWidth = 2 }: Props) {
+export function Icon({ name, size = 22, color = '#fff', strokeWidth = 2, gradient = false }: Props) {
+  const gradId = `g_${name}_${Math.random().toString(36).slice(2, 6)}`;
+  const useGrad = gradient || name === 'bookmark' || name === 'starFilled';
+  const effectiveStroke = useGrad ? `url(#${gradId})` : color;
+
   const common = {
     width: size,
     height: size,
     viewBox: '0 0 24 24',
     fill: 'none',
-    stroke: color,
+    stroke: effectiveStroke,
     strokeWidth,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
@@ -78,5 +83,18 @@ export function Icon({ name, size = 22, color = '#fff', strokeWidth = 2 }: Props
     }
   })();
 
-  return <Svg {...common}>{body}</Svg>;
+  return (
+    <Svg {...common}>
+      {useGrad ? (
+        <Defs>
+          <LinearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor="#8A5BFF" />
+            <Stop offset="50%" stopColor="#FF6B9D" />
+            <Stop offset="100%" stopColor="#FFA63D" />
+          </LinearGradient>
+        </Defs>
+      ) : null}
+      {body}
+    </Svg>
+  );
 }

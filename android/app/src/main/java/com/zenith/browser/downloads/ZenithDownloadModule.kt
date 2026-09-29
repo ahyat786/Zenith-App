@@ -505,9 +505,9 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                 job.finishedAt = System.currentTimeMillis()
             }
             if (job.status == "done") {
-                notifyUser("Unduhan selesai", job.name, "job:${job.id}")
+                notifyUser("Unduhan selesai", job.name, "job:${job.id}", job)
             } else if (job.status == "error") {
-                notifyUser("Unduhan gagal", job.error ?: job.name, "job:${job.id}")
+                notifyUser("Unduhan gagal", job.error ?: job.name, "job:${job.id}", job)
             }
             persist()
             emit(job)
@@ -927,7 +927,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         emit(job)
     }
 
-    fun notifyUser(title: String, text: String, dedupeKey: String = "$title|$text") {
+    fun notifyUser(title: String, text: String, dedupeKey: String = "$title|$text", job: Job? = null) {
         val now = System.currentTimeMillis()
         val key = dedupeKey
         val prev = lastNotice[key] ?: 0L
@@ -964,16 +964,51 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
                             NotificationChannel("zenith-downloads", "Unduhan", NotificationManager.IMPORTANCE_DEFAULT),
                         )
                     }
+                    val pendingIntent = createDownloadPendingIntent(ctx, job)
                     val n = NotificationCompat.Builder(ctx, "zenith-downloads")
                         .setSmallIcon(android.R.drawable.stat_sys_download_done)
                         .setContentTitle(title)
                         .setContentText(text)
                         .setAutoCancel(true)
+                        .setContentIntent(pendingIntent)
                         .build()
                     nm.notify(key.hashCode(), n)
                 }
             } catch (_: Throwable) {
             }
+        }
+    }
+
+    private fun createDownloadPendingIntent(ctx: Context, job: Job?): PendingIntent? {
+        try {
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            if (job != null && job.status == "done" && existsTarget(job)) {
+                val file = job.file
+                val uri = if (file != null && file.exists()) fileUri(file) else job.uri
+                if (uri != null) {
+                    val mime = viewMime(job)
+                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, mime)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                        clipData = ClipData.newRawUri(job.name, uri)
+                    }
+                    grantToMatches(viewIntent, uri)
+                    return PendingIntent.getActivity(ctx, job.id.hashCode(), viewIntent, flags)
+                }
+            }
+            // Default: buka Zenith langsung ke halaman unduhan
+            val openAppIntent = Intent(ctx, com.zenith.browser.MainActivity::class.java).apply {
+                action = "com.zenith.browser.ACTION_OPEN_DOWNLOADS"
+                putExtra("screen", "downloads")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            return PendingIntent.getActivity(ctx, 4104, openAppIntent, flags)
+        } catch (_: Throwable) {
+            return null
         }
     }
 

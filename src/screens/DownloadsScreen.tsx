@@ -75,6 +75,7 @@ export function DownloadsScreen() {
   const [url, setUrl] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [selectedCat, setSelectedCat] = useState<'Semua' | DownloadCategory>('Semua');
 
   const refresh = useCallback(async () => {
     setJobs(await listDownloads());
@@ -90,9 +91,18 @@ export function DownloadsScreen() {
   const back = () => dispatch({ type: 'SET_SCREEN', screen: 'browser' });
 
   const q = query.trim().toLowerCase();
-  const shown = q
+  const filteredBySearch = q
     ? jobs.filter((j) => `${j.filename} ${j.url}`.toLowerCase().includes(q))
     : jobs;
+
+  const shown = selectedCat === 'Semua'
+    ? filteredBySearch
+    : filteredBySearch.filter((j) => downloadCategory(j) === selectedCat);
+
+  const totalUsedBytes = useMemo(() => {
+    return jobs.reduce((acc, j) => acc + (j.total > 0 ? j.total : j.done || 0), 0);
+  }, [jobs]);
+
   const active = shown.filter((j) => j.status === 'connecting' || j.status === 'downloading');
   const failed = useMemo(() => {
     const latest = new Map<string, DownloadJob>();
@@ -188,6 +198,49 @@ export function DownloadsScreen() {
           <TextField theme={theme} value={query} onChangeText={setQuery} placeholder="Cari berkas atau URL" />
         </View>
       ) : null}
+
+      {/* Info Ruang Terpakai ala Brave */}
+      <View style={{ paddingHorizontal: spacing.lg, paddingTop: 10, paddingBottom: 6 }}>
+        <Text style={{ color: theme.subtext, fontSize: 13, fontWeight: '500' }}>
+          {fmtBytes(totalUsedBytes)} terpakai di perangkat
+        </Text>
+      </View>
+
+      {/* Tabs Kategori ala Brave Download */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingVertical: 8, gap: 8 }}>
+        {(['Semua', ...CATEGORIES] as const).map((cat) => {
+          const isSel = selectedCat === cat;
+          return (
+            <Pressable
+              key={cat}
+              onPress={() => setSelectedCat(cat)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 14,
+                paddingVertical: 7,
+                borderRadius: 20,
+                backgroundColor: isSel ? theme.accent : theme.surface2,
+                borderWidth: 1,
+                borderColor: isSel ? theme.accent : theme.border,
+              }}>
+              {isSel ? <Icon name="check" size={14} color="#fff" /> : null}
+              <Text
+                style={{
+                  color: isSel ? '#fff' : theme.text,
+                  fontSize: 13,
+                  fontWeight: isSel ? '700' : '500',
+                  marginLeft: isSel ? 6 : 0,
+                }}>
+                {cat}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
       {!downloadsAvailable ? (
         <EmptyState
           theme={theme}
