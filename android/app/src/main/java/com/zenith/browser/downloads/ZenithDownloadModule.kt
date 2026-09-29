@@ -2,7 +2,9 @@ package com.zenith.browser.downloads
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ClipData
+import android.content.Context
 import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
