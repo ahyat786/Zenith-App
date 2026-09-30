@@ -53,6 +53,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     companion object {
         const val NAME = "ZenithDownloads"
         const val EVENT = "ZenithDownloadProgress"
+        const val EVENT_PROMPT = "ZenithDownloadPrompt"
         private const val PART_RETRIES = 3
         private const val UA =
             "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
@@ -207,8 +208,32 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun removeListeners(count: Int) { /* wajib untuk NativeEventEmitter */ }
 
-    fun enqueue(
+    fun promptDownload(
         url: String,
+        filenameIn: String?,
+        mime: String?,
+        contentLength: Long,
+        cookie: String?,
+    ) {
+        val guessedMime = mime?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
+        val name = cleanName(filenameIn, guessedMime, url)
+        val params = Arguments.createMap().apply {
+            putString("url", url)
+            putString("filename", name)
+            putString("mime", guessedMime)
+            putDouble("total", contentLength.toDouble())
+            putString("cookie", cookie ?: "")
+        }
+        try {
+            reactApplicationContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit(EVENT_PROMPT, params)
+        } catch (_: Throwable) {
+            enqueue(url, name, guessedMime, 4, false, cookie)
+        }
+    }
+
+    fun enqueue(
         filenameIn: String?,
         mime: String?,
         connections: Int,

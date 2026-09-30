@@ -72,19 +72,15 @@ export function NewTabPage({ theme, tab }: { theme: Theme; tab?: Tab | null }) {
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: 32 }}
       keyboardShouldPersistTaps="handled">
       <View style={{ alignItems: 'center', marginTop: 12, marginBottom: 18 }}>
-        <View
+        <Image
+          source={require('../assets/logo.png')}
           style={{
-            width: 72,
-            height: 72,
+            width: 80,
+            height: 80,
             borderRadius: 22,
-            backgroundColor: theme.accentSoft,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderWidth: 1,
-            borderColor: theme.accent,
-          }}>
-          <Text style={{ fontSize: 34, fontWeight: '900', color: theme.accent }}>Z</Text>
-        </View>
+          }}
+          resizeMode="contain"
+        />
         <Text style={{ color: theme.text, fontSize: 22, fontWeight: '800', marginTop: 12 }}>{greeting}</Text>
         <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 4, textAlign: 'center', paddingHorizontal: 12 }}>
           {privateTab

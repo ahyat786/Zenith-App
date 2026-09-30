@@ -42,7 +42,7 @@ class ZenithWebViewManager : RNCWebViewManager() {
         if (idx >= 0) {
             ZenithPrivate.noteProfile(view.webView, raw.substring(idx + marker.length).trim())
             val ua = raw.substring(0, idx).trim()
-            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.5.0" else ua)
+            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.5.1" else ua)
         } else {
             super.setApplicationNameForUserAgent(view, value)
         }

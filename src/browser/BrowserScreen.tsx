@@ -11,12 +11,14 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Modal,
   Pressable,
   ScrollView,
   Share,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   ToastAndroid,
   View,
 } from 'react-native';
@@ -44,8 +46,30 @@ import {
   type ConnLogEntry,
 } from '../core/native';
 import { DESKTOP_UA, isDesktopUa } from '../core/desktop';
-import { subscribeDownloads, type DownloadJob } from '../core/downloads';
+import {
+  startDownload,
+  subscribeDownloads,
+  subscribeDownloadPrompts,
+  type DownloadJob,
+  type DownloadPromptRequest,
+} from '../core/downloads';
 import type { Tab } from '../types';
+
+function formatDownloadSize(bytes: number): string {
+  if (bytes <= 0) {
+    return '';
+  }
+  if (bytes >= 1_000_000_000) {
+    return ` (${(bytes / 1_000_000_000).toFixed(2).replace('.', ',')} GB)`;
+  }
+  if (bytes >= 1_000_000) {
+    return ` (${(bytes / 1_000_000).toFixed(2).replace('.', ',')} MB)`;
+  }
+  if (bytes >= 1_000) {
+    return ` (${(bytes / 1_000).toFixed(1).replace('.', ',')} KB)`;
+  }
+  return ` (${bytes} B)`;
+}
 
 export function BrowserScreen() {
   const { state, fullState, dispatch, switchProfile, activeTab, tabsInWorkspace, openNewTab, siteConfigFor } = useStore();
@@ -55,6 +79,9 @@ export function BrowserScreen() {
   const [shieldsOpen, setShieldsOpen] = useState(false);
   const [stats, setStats] = useState<AdblockStats | null>(null);
   const [download, setDownload] = useState<DownloadJob | null>(null);
+  const [promptReq, setPromptReq] = useState<DownloadPromptRequest | null>(null);
+  const [promptBaseName, setPromptBaseName] = useState('');
+  const [promptExt, setPromptExt] = useState('');
   const [connLog, setConnLog] = useState<ConnLogEntry[]>([]);
   const [profilesOpen, setProfilesOpen] = useState(false);
 
@@ -107,9 +134,13 @@ export function BrowserScreen() {
   }, []);
   useEffect(() => {
     refreshStats();
-    const t = setInterval(refreshStats, 1000);
+    // Hanya polling ketika panel shields sedang terbuka agar hemat baterai
+    if (!shieldsOpen) {
+      return;
+    }
+    const t = setInterval(refreshStats, 3000);
     return () => clearInterval(t);
-  }, [refreshStats, activeTab?.url]);
+  }, [refreshStats, shieldsOpen, activeTab?.url]);
 
   // ---------- log koneksi Shield Guard (hostname) ----------
   const refreshConnLog = useCallback(async () => {
@@ -120,9 +151,26 @@ export function BrowserScreen() {
       return;
     }
     refreshConnLog();
-    const t = setInterval(refreshConnLog, 1500);
+    const t = setInterval(refreshConnLog, 3000);
     return () => clearInterval(t);
   }, [shieldsOpen, refreshConnLog, activeTab?.url]);
+
+  // ---------- dialog konfirmasi unduhan berkas ----------
+  useEffect(() => {
+    const unsub = subscribeDownloadPrompts((req) => {
+      let base = req.filename || 'berkas';
+      let ext = '';
+      const dotIdx = base.lastIndexOf('.');
+      if (dotIdx > 0) {
+        ext = base.substring(dotIdx);
+        base = base.substring(0, dotIdx);
+      }
+      setPromptBaseName(base);
+      setPromptExt(ext);
+      setPromptReq(req);
+    });
+    return unsub;
+  }, []);
 
   // ---------- banner unduhan ----------
   // error/canceled tidak boleh menempel. X atau 0-byte yang macet disembunyikan.
@@ -159,6 +207,7 @@ export function BrowserScreen() {
     menuOpen,
     shieldsOpen,
     profilesOpen,
+    promptOpen: !!promptReq,
     ui: state.ui,
     tabId: activeTab?.id ?? null,
     canGoBack: !!activeTab?.canGoBack,
@@ -167,6 +216,7 @@ export function BrowserScreen() {
     menuOpen,
     shieldsOpen,
     profilesOpen,
+    promptOpen: !!promptReq,
     ui: state.ui,
     tabId: activeTab?.id ?? null,
     canGoBack: !!activeTab?.canGoBack,
@@ -189,6 +239,10 @@ export function BrowserScreen() {
         noteBackHandled();
         return true;
       };
+      if (cur.promptOpen) {
+        setPromptReq(null);
+        return close();
+      }
       if (cur.menuOpen) {
         setMenuOpen(false);
         return close();
@@ -1061,6 +1115,177 @@ export function BrowserScreen() {
           </Pressable>
         </View>
       </Sheet>
+      {/* Modal Konfirmasi Unduhan Berkas */}
+      <Modal
+        visible={!!promptReq}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPromptReq(null)}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.65)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 24,
+          }}>
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 360,
+              backgroundColor: '#1E1B24',
+              borderRadius: 28,
+              paddingHorizontal: 24,
+              paddingTop: 28,
+              paddingBottom: 24,
+              alignItems: 'center',
+              elevation: 24,
+              shadowColor: '#000',
+              shadowOpacity: 0.4,
+              shadowRadius: 16,
+            }}>
+            {/* Download Icon */}
+            <View style={{ marginBottom: 16 }}>
+              <Icon name="download" size={32} color="#FFFFFF" strokeWidth={2.2} />
+            </View>
+
+            {/* Title: Unduh berkas? (80,24 MB) */}
+            <Text
+              style={{
+                color: '#FFFFFF',
+                fontSize: 20,
+                fontWeight: '700',
+                textAlign: 'center',
+                marginBottom: 24,
+              }}>
+              Unduh berkas?{promptReq ? formatDownloadSize(promptReq.total) : ''}
+            </Text>
+
+            {/* Input Nama Berkas */}
+            <View
+              style={{
+                width: '100%',
+                borderWidth: 1,
+                borderColor: '#4A4654',
+                borderRadius: 14,
+                paddingHorizontal: 14,
+                paddingTop: 10,
+                paddingBottom: 8,
+                position: 'relative',
+                marginBottom: 18,
+              }}>
+              <Text
+                style={{
+                  position: 'absolute',
+                  top: -10,
+                  left: 14,
+                  backgroundColor: '#1E1B24',
+                  paddingHorizontal: 6,
+                  color: '#9E9AA7',
+                  fontSize: 12,
+                  fontWeight: '600',
+                }}>
+                Nama
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TextInput
+                  value={promptBaseName}
+                  onChangeText={setPromptBaseName}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  selectTextOnFocus
+                  style={{
+                    flex: 1,
+                    color: '#FFFFFF',
+                    fontSize: 15,
+                    padding: 0,
+                    margin: 0,
+                  }}
+                />
+                {promptExt ? (
+                  <Text
+                    style={{
+                      color: '#B5B1BE',
+                      fontSize: 15,
+                      marginLeft: 2,
+                    }}>
+                    {promptExt}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+
+            {/* Target Folder: ~/Download */}
+            <View
+              style={{
+                width: '100%',
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 4,
+                marginBottom: 32,
+              }}>
+              <Icon name="folder" size={22} color="#B5B1BE" />
+              <Text
+                style={{
+                  color: '#FFFFFF',
+                  fontSize: 15,
+                  fontWeight: '500',
+                  marginLeft: 12,
+                }}>
+                ~/Download
+              </Text>
+            </View>
+
+            {/* Action Buttons: Batal & Unduh */}
+            <View
+              style={{
+                width: '100%',
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                gap: 16,
+              }}>
+              <Pressable
+                onPress={() => setPromptReq(null)}
+                hitSlop={12}
+                style={{ paddingHorizontal: 16, paddingVertical: 10 }}>
+                <Text
+                  style={{
+                    color: '#FFFFFF',
+                    fontSize: 15,
+                    fontWeight: '600',
+                  }}>
+                  Batal
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (!promptReq) return;
+                  const finalName = `${promptBaseName.trim() || 'berkas'}${promptExt}`;
+                  startDownload(promptReq.url, finalName, promptReq.mime, 4);
+                  setPromptReq(null);
+                }}
+                style={({ pressed }) => ({
+                  backgroundColor: pressed ? '#A88DEB' : '#B89BFC',
+                  paddingHorizontal: 28,
+                  paddingVertical: 12,
+                  borderRadius: 22,
+                  elevation: 2,
+                })}>
+                <Text
+                  style={{
+                    color: '#1E1B24',
+                    fontSize: 15,
+                    fontWeight: '700',
+                  }}>
+                  Unduh
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {state.ui.omnibox.open ? <Omnibox theme={theme} /> : null}
     </View>
   );

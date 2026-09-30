@@ -12,7 +12,7 @@ import com.zenith.browser.webview.ZenithPrivate
 
 /**
  * Jembatan unduhan WebView. Hanya http(s). URL yang sama tidak diantre dua kali;
- * pemicu kedua memunculkan pemberitahuan.
+ * pemicu kedua memunculkan konfirmasi / pemberitahuan.
  */
 object DownloadBus {
     @Volatile
@@ -28,6 +28,7 @@ object DownloadBus {
         val filename: String?,
         val mime: String?,
         val cookie: String?,
+        val contentLength: Long,
     )
 
     fun request(
@@ -51,12 +52,12 @@ object DownloadBus {
         val cookie = ZenithPrivate.cookies(view, url)
         val mod = module
         if (fastEnabled && mod != null) {
-            mod.enqueue(url, filename, mime, 4, false, cookie)
+            mod.promptDownload(url, filename, mime, contentLength, cookie)
             return
         }
         synchronized(pending) {
             if (pending.none { it.url.substringBefore('#') == url.substringBefore('#') }) {
-                pending.add(Pending(url, filename, mime, cookie))
+                pending.add(Pending(url, filename, mime, cookie, contentLength))
             }
         }
         if (!fastEnabled) {
@@ -72,7 +73,7 @@ object DownloadBus {
             copy
         }
         for (item in batch) {
-            mod.enqueue(item.url, item.filename, item.mime, 4, false, item.cookie)
+            mod.promptDownload(item.url, item.filename, item.mime, item.contentLength, item.cookie)
         }
     }
 

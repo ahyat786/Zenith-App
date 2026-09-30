@@ -135,7 +135,16 @@ export async function setFastDownloadsEnabled(enabled: boolean): Promise<void> {
   }
 }
 
+export interface DownloadPromptRequest {
+  url: string;
+  filename: string;
+  mime?: string;
+  total: number;
+  cookie?: string;
+}
+
 type DownloadListener = (job: DownloadJob) => void;
+type DownloadPromptListener = (req: DownloadPromptRequest) => void;
 
 export function subscribeDownloads(cb: DownloadListener): () => void {
   if (!D) {
@@ -143,5 +152,14 @@ export function subscribeDownloads(cb: DownloadListener): () => void {
   }
   const emitter = new NativeEventEmitter(D as any);
   const sub = emitter.addListener('ZenithDownloadProgress', cb as any);
+  return () => sub.remove();
+}
+
+export function subscribeDownloadPrompts(cb: DownloadPromptListener): () => void {
+  if (!D) {
+    return () => {};
+  }
+  const emitter = new NativeEventEmitter(D as any);
+  const sub = emitter.addListener('ZenithDownloadPrompt', cb as any);
   return () => sub.remove();
 }

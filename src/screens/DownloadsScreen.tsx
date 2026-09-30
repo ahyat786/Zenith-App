@@ -207,40 +207,42 @@ export function DownloadsScreen() {
       </View>
 
       {/* Tabs Kategori ala Brave Download */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingVertical: 8, gap: 8 }}>
-        {(['Semua', ...CATEGORIES] as const).map((cat) => {
-          const isSel = selectedCat === cat;
-          return (
-            <Pressable
-              key={cat}
-              onPress={() => setSelectedCat(cat)}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingHorizontal: 14,
-                paddingVertical: 7,
-                borderRadius: 20,
-                backgroundColor: isSel ? theme.accent : theme.surface2,
-                borderWidth: 1,
-                borderColor: isSel ? theme.accent : theme.border,
-              }}>
-              {isSel ? <Icon name="check" size={14} color="#fff" /> : null}
-              <Text
+      <View style={{ height: 46 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: spacing.lg, alignItems: 'center', gap: 8 }}>
+          {(['Semua', ...CATEGORIES] as const).map((cat) => {
+            const isSel = selectedCat === cat;
+            return (
+              <Pressable
+                key={cat}
+                onPress={() => setSelectedCat(cat)}
                 style={{
-                  color: isSel ? '#fff' : theme.text,
-                  fontSize: 13,
-                  fontWeight: isSel ? '700' : '500',
-                  marginLeft: isSel ? 6 : 0,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 14,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: isSel ? theme.accent : theme.surface2,
+                  borderWidth: 1,
+                  borderColor: isSel ? theme.accent : theme.border,
                 }}>
-                {cat}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                {isSel ? <Icon name="check" size={14} color="#fff" /> : null}
+                <Text
+                  style={{
+                    color: isSel ? '#fff' : theme.text,
+                    fontSize: 13,
+                    fontWeight: isSel ? '700' : '500',
+                    marginLeft: isSel ? 6 : 0,
+                  }}>
+                  {cat}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
       {!downloadsAvailable ? (
         <EmptyState
           theme={theme}
