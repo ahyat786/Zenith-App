@@ -94,6 +94,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     )
 
     private val jobs = ConcurrentHashMap<String, Job>()
+    private val pendingCookies = ConcurrentHashMap<String, String>()
     private val pool = Executors.newCachedThreadPool()
     private val reporter = Executors.newSingleThreadScheduledExecutor()
     private val historyLock = Any()
@@ -113,7 +114,8 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun start(url: String, filename: String?, mime: String?, connections: Int, promise: Promise) {
         try {
-            promise.resolve(enqueue(url, filename, mime, connections, true, null))
+            val savedCookie = pendingCookies.remove(url) ?: pendingCookies.remove(url.substringBefore('#').trim())
+            promise.resolve(enqueue(url, filename, mime, connections, true, savedCookie))
         } catch (t: Throwable) {
             promise.reject("ZENITH_DL", t.message ?: t.toString(), t)
         }
@@ -215,6 +217,10 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
         contentLength: Long,
         cookie: String?,
     ) {
+        if (!cookie.isNullOrBlank()) {
+            pendingCookies[url] = cookie
+            pendingCookies[url.substringBefore('#').trim()] = cookie
+        }
         val guessedMime = mime?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
         val name = cleanName(filenameIn, guessedMime, url)
         val params = Arguments.createMap().apply {

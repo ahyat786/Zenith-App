@@ -30,7 +30,6 @@ import {
   forceWebViewLoad,
   cancelBlankProbe,
   guardNavigation,
-  navigationEpoch,
   noteBlankProbeResult,
   pendingNavigationUrl,
   probeBlankWebView,
@@ -49,10 +48,22 @@ export function TabView({ tab, active, theme }: Props) {
   const { state, fullState, dispatch, siteConfigFor, openNewTab } = useStore();
   const pendingUrl = pendingNavigationUrl(tab.id);
   const sourceUrl = pendingUrl || tab.url;
+  /**
+   * URL awal WebView DIBEKUKAN saat mount.
+   *
+   * Prop `source` react-native-webview memanggil loadUrl setiap kali berubah.
+   * Sebelumnya nilai ini mengikuti tab.url sehingga setiap pengalihan (redirect),
+   * navigasi SPA, atau re-render memicu muat ulang baru — inilah penyebab
+   * halaman "refresh terus menerus" di tab aktif. Navigasi yang disengaja
+   * sekarang lewat claimWebViewLoad + forceWebViewLoad saja.
+   */
+  const initialUrl = useRef<string>(pendingUrl || tab.url).current;
+  const source = useRef({ uri: initialUrl }).current;
   const lastHistoryUrl = useRef<string>('');
   const injectGen = useRef(0);
-  const mountedAt = useRef(Date.now());
   const loadedOnce = useRef(false);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
 
   const siteCfg = siteConfigFor(tab.url);
   /** Mode desktop per-situs: UA macOS + viewport 1280 + scalesPageToFit. */
@@ -64,21 +75,15 @@ export function TabView({ tab, active, theme }: Props) {
     (ref: any) => {
       if (ref) {
         webviewRefs.set(tab.id, ref);
-        const locked = claimWebViewLoad(tab.id) || pendingNavigationUrl(tab.id);
-        if (locked) {
+        const locked = claimWebViewLoad(tab.id);
+        if (locked && locked !== initialUrl) {
           forceWebViewLoad(ref, locked);
-          // Satu putaran kemudian: native view kadang belum siap di callback ref.
-          setTimeout(() => {
-            if (pendingNavigationUrl(tab.id) === locked) {
-              forceWebViewLoad(webviewRefs.get(tab.id), locked);
-            }
-          }, 0);
         }
       } else {
         webviewRefs.delete(tab.id);
       }
     },
-    [tab.id],
+    [tab.id, initialUrl],
   );
 
   const foreignUrls = fullState.tabs
@@ -92,46 +97,35 @@ export function TabView({ tab, active, theme }: Props) {
       return;
     }
     const locked = claimWebViewLoad(tab.id);
-    if (locked) {
+    if (locked && locked !== initialUrl) {
       forceWebViewLoad(wv, locked);
     }
-  }, [tab.id, tab.url, sourceUrl]);
+  }, [tab.id, tab.url, initialUrl]);
 
+  /**
+   * Pulihkan hanya bila renderer benar-benar mati (halaman putih setelah
+   * aplikasi lama di latar). Tidak pernah memuat ulang saat halaman sedang
+   * memuat — dulu inilah yang membuat tombol refresh berputar terus.
+   */
   const recoverIfBlank = useCallback(() => {
-    // Jangan probe jika tab sedang navigasi atau baru berpindah/tutup tab
-    if (pendingNavigationUrl(tab.id)) {
+    const cur = tabRef.current;
+    if (!active || cur.loading || pendingNavigationUrl(tab.id) || !loadedOnce.current) {
       return;
     }
-    if (!loadedOnce.current && Date.now() - mountedAt.current < 2500) {
-      return;
-    }
-    if (!active) {
-      return;
-    }
-    // Jika tab sudah pernah dimuat dan aktif, JANGAN probe ulang otomatis
-    // karena saat tab lain ditutup, re-render ini menyebabkan reload pada tab aktif!
-    if (loadedOnce.current) {
-      return;
-    }
-    probeBlankWebView(tab.id, tab.url);
-  }, [active, tab.id, tab.url]);
+    probeBlankWebView(tab.id, cur.url);
+  }, [active, tab.id]);
 
-  useEffect(() => {
-    if (!active) {
-      return;
-    }
-    const wait = loadedOnce.current ? 800 : Math.max(0, 2500 - (Date.now() - mountedAt.current));
-    const timer = setTimeout(recoverIfBlank, wait);
-    return () => clearTimeout(timer);
-  }, [active, recoverIfBlank]);
-
+  // Batas aman indikator pemuatan saja. Jangan panggil stopLoading() agar
+  // unduhan atau streaming panjang tidak terputus.
   useEffect(() => {
     if (!tab.loading) {
       return;
     }
     const timer = setTimeout(() => {
-      dispatch({ type: 'UPDATE_TAB', id: tab.id, patch: { loading: false } });
-    }, 12000);
+      if (tabRef.current.loading) {
+        dispatch({ type: 'UPDATE_TAB', id: tab.id, patch: { loading: false, progress: 1 } });
+      }
+    }, 15000);
     return () => clearTimeout(timer);
   }, [tab.loading, tab.id, dispatch]);
 
@@ -142,7 +136,7 @@ export function TabView({ tab, active, theme }: Props) {
         if (timer) {
           clearTimeout(timer);
         }
-        timer = setTimeout(recoverIfBlank, 350);
+        timer = setTimeout(recoverIfBlank, 450);
       }
     });
     return () => {
@@ -363,9 +357,8 @@ export function TabView({ tab, active, theme }: Props) {
   return (
     <View style={{ flex: 1, display: active ? 'flex' : 'none', zIndex: active ? 2 : 0 }}>
       <Wv
-        key={`${navigationEpoch(tab.id)}`}
         ref={setRef}
-        source={{ uri: sourceUrl }}
+        source={source}
         style={{ flex: 1, backgroundColor: theme.bg }}
         originWhitelist={['*']}
         injectedJavaScriptBeforeContentLoaded={
@@ -427,7 +420,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent={`Zenith/0.5.1 zp:${tab.profileId || 'profile-utama'}`}
+        applicationNameForUserAgent={`Zenith/0.5.2 zp:${tab.profileId || 'profile-utama'}`}
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

@@ -388,14 +388,15 @@ function reducer(state: AppState, action: Action): AppState {
       if (current && nextUrl && nextUrl !== current.url) {
         const pending = pendingNavigationUrl(action.id);
         const samePending = !!pending && canonicalUrl(nextUrl) === canonicalUrl(pending);
-        const copiesOther = state.tabs.some(
-          (t) => t.id !== action.id && !!t.url && !isNewTabUrl(t.url) && canonicalUrl(t.url) === canonicalUrl(nextUrl),
-        );
+        // Catatan v0.5.2: klausa "URL ini sama dengan tab lain" DIBUANG.
+        // Dua tab memang boleh membuka halaman yang sama (dan pengalihan ke
+        // URL yang sudah dibuka tab lain itu normal). Klausa itu dulu membuat
+        // URL tab aktif membeku di alamat lama sehingga pengguna melihat
+        // "halaman tidak pindah-pindah" lalu menekan refresh berulang.
         const reject =
           tabUrlLocked(action.id) ||
           (isNewTabUrl(current.url) && !samePending) ||
-          (!!pending && !samePending) ||
-          (copiesOther && !samePending);
+          (!!pending && !samePending);
         if (reject) {
           const rest = { ...patch };
           delete rest.url;

@@ -218,36 +218,13 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
         promise.resolve(true)
     }
 
-    /** Singkirkan permukaan WebView lama saat tab baru terbuka. Jangan kembalikan; view baru yang memuat URL. */
+    /**
+     * Pertahankan kompatibilitas bridge tanpa menyembunyikan atau menghentikan WebView
+     * tab lain yang masih aktif di memori.
+     */
     @ReactMethod
     fun setPageHold(hold: Boolean) {
-        if (!hold) {
-            return
-        }
-        val activity = reactApplicationContext.currentActivity ?: return
-        activity.runOnUiThread {
-            val root = activity.window?.decorView ?: return@runOnUiThread
-            hideWebViews(root)
-        }
-    }
-
-    private fun hideWebViews(view: View) {
-        if (view is WebView) {
-            try {
-                view.stopLoading()
-                view.onPause()
-            } catch (_: Throwable) {
-            }
-            view.translationX = 100000f
-            view.alpha = 0f
-            view.visibility = View.GONE
-            return
-        }
-        if (view is ViewGroup) {
-            for (i in 0 until view.childCount) {
-                hideWebViews(view.getChildAt(i))
-            }
-        }
+        // No-op: visibilitas tiap tab diatur oleh kontainer React Native (display: 'none' / 'flex').
     }
 
     /** Pulihkan kuki v0.4.4 yang tersesat di toples Zu, tanpa menimpa toples bawaan. */

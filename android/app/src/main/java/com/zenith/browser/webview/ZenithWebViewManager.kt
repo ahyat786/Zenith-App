@@ -1,5 +1,6 @@
 package com.zenith.browser.webview
 
+import android.webkit.WebSettings
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.uimanager.ThemedReactContext
 import com.reactnativecommunity.webview.RNCWebViewManager
@@ -7,25 +8,46 @@ import com.reactnativecommunity.webview.RNCWebViewWrapper
 import com.zenith.browser.downloads.DownloadBus
 
 /**
- * Manager WebView Zenith — nama komponen tetap "RNCWebView",
- * tetapi klien dan unduhan diganti, dan mode privat tidak menghapus
- * kuki tab normal.
+ * Manager WebView Zenith — nama komponen tetap "RNCWebView", klien dan
+ * unduhan diganti, mode privat tidak menghapus kuki tab normal.
+ *
+ * PERBAIKAN v0.5.2 — penyebab "tab aktif refresh terus menerus":
+ *
+ *  RNCWebViewManager menyimpan `mPendingSource`, `mUserAgent`, dan
+ *  `mUserAgentWithApplicationName` pada SATU objek impl bersama, lalu
+ *  memprosesnya sinkron di `onAfterUpdateTransaction(view)`.
+ *
+ *  Versi lama menunda `super.setNewSource()` di dalam `view.post { ... }`.
+ *  Akibatnya `mPendingSource` milik WebView A tertinggal dan ikut diproses
+ *  ulang untuk WebView B (view daur ulang / re-render berikutnya), sehingga
+ *  `loadSource` memanggil `loadUrl` berulang tanpa henti — halaman tampak
+ *  me-refresh sendiri di tab yang sedang dibuka, dan URL tab lain ikut
+ *  tersalin. Sekarang semuanya dijalankan sinkron + idempoten:
+ *
+ *   1. Tidak ada penundaan `view.post` sebelum `super.setNewSource`.
+ *   2. URI awal yang sama tidak pernah dimuat ulang (tag per-view).
+ *   3. UA (per-situs, mode desktop) disimpan per-view, bukan di field bersama.
+ *   4. Tidak pernah menyembunyikan / menghentikan WebView tab lain.
  */
 class ZenithWebViewManager : RNCWebViewManager() {
+
+    companion object {
+        private const val TAG_LAST_SOURCE_URI = 0x5e417010
+        private const val TAG_CUSTOM_UA = 0x5e417011
+        private const val TAG_APP_NAME_UA = 0x5e417012
+        private const val FALLBACK_APP_VERSION = "Zenith/0.5.2"
+    }
 
     override fun getName(): String = "RNCWebView"
 
     /**
-     * Jangan panggil super. RNCWebViewManagerImpl.setIncognito(true)
+     * Jangan panggil super.setIncognito(true). RNCWebViewManagerImpl
      * menjalankan CookieManager.removeAllCookies() pada toples global,
      * lalu tab privat tetap berbagi kuki dengan tab biasa.
      */
     override fun createViewInstance(reactContext: ThemedReactContext): RNCWebViewWrapper {
-        // Jangan setProfile di sini. Profil tab belum diketahui, dan profil
-        // utama harus tetap di toples bawaan supaya akun tidak hilang.
         val view = super.createViewInstance(reactContext)
-        // State tersimpan Android bisa mengembalikan URL tanpa isi. RN lalu
-        // melewatkan loadUrl karena URL-nya sama, dan tab terbuka putih.
+        // State tersimpan Android bisa mengembalikan URL tanpa isi.
         view.webView.setSaveEnabled(false)
         view.webView.setSaveFromParentEnabled(false)
         return view
@@ -35,6 +57,16 @@ class ZenithWebViewManager : RNCWebViewManager() {
         ZenithPrivate.bind(view.webView, value)
     }
 
+    /** UA kustom per tab (mode desktop per-situs). Jangan lewat field bersama impl. */
+    override fun setUserAgent(view: RNCWebViewWrapper, value: String?) {
+        view.webView.setTag(TAG_CUSTOM_UA, value?.takeIf { it.isNotBlank() })
+        applyUserAgent(view)
+    }
+
+    /**
+     * Penanda profil pada UA (` zp:`) dipakai untuk mengikat toples kuki tab ini.
+     * Nilai UA disimpan per-view agar tab lain tidak mewarisinya.
+     */
     override fun setApplicationNameForUserAgent(view: RNCWebViewWrapper, value: String?) {
         val raw = value ?: ""
         val marker = " zp:"
@@ -42,31 +74,77 @@ class ZenithWebViewManager : RNCWebViewManager() {
         if (idx >= 0) {
             ZenithPrivate.noteProfile(view.webView, raw.substring(idx + marker.length).trim())
             val ua = raw.substring(0, idx).trim()
-            super.setApplicationNameForUserAgent(view, if (ua.isEmpty()) "Zenith/0.5.1" else ua)
+            view.webView.setTag(TAG_APP_NAME_UA, if (ua.isEmpty()) FALLBACK_APP_VERSION else ua)
         } else {
-            super.setApplicationNameForUserAgent(view, value)
+            view.webView.setTag(TAG_APP_NAME_UA, value?.takeIf { it.isNotBlank() })
+        }
+        applyUserAgent(view)
+    }
+
+    private fun applyUserAgent(view: RNCWebViewWrapper) {
+        val customUa = view.webView.getTag(TAG_CUSTOM_UA) as? String
+        val appName = view.webView.getTag(TAG_APP_NAME_UA) as? String
+        val defaultUa = try {
+            WebSettings.getDefaultUserAgent(view.webView.context)
+        } catch (_: Throwable) {
+            ""
+        }
+        val targetUa = when {
+            !customUa.isNullOrBlank() -> customUa
+            !appName.isNullOrBlank() -> "$defaultUa $appName".trim()
+            else -> defaultUa
+        }
+        if (targetUa.isBlank()) {
+            return
+        }
+        try {
+            if (view.webView.settings.userAgentString != targetUa) {
+                view.webView.settings.userAgentString = targetUa
+            }
+        } catch (_: Throwable) {
         }
     }
 
     /**
-     * Tunda muat satu putaran UI agar profil tab dan mode privat terpasang
-     * sebelum permintaan pertama. Profil utama tidak dipindah ke ProfileStore.
+     * Sinkron. Jangan dibungkus `view.post` — lihat catatan kelas.
+     * URI awal yang sama hanya dimuat sekali; sesudah itu navigasi di dalam
+     * halaman (redirect, SPA) dibiarkan hidup tanpa dimuat ulang.
      */
     override fun setNewSource(view: RNCWebViewWrapper, source: ReadableMap?) {
         view.webView.translationX = 0f
         view.webView.alpha = 1f
         view.webView.visibility = android.view.View.VISIBLE
-        view.webView.post {
-            if (!ZenithPrivate.hasProfileHint(view.webView)) {
-                view.webView.post {
-                    ZenithPrivate.ensureBeforeLoad(view.webView)
-                    loadSource(view, source)
-                }
-                return@post
-            }
-            ZenithPrivate.ensureBeforeLoad(view.webView)
-            loadSource(view, source)
+        val uri = try {
+            if (source != null && source.hasKey("uri")) source.getString("uri") else null
+        } catch (_: Throwable) {
+            null
         }
+        if (!uri.isNullOrBlank() && (uri == "about:blank" || uri.startsWith("zenith:"))) {
+            return
+        }
+        if (!uri.isNullOrBlank() && uri == view.webView.getTag(TAG_LAST_SOURCE_URI)) {
+            // Sumber awal sudah pernah dimuat untuk view ini — biarkan halaman
+            // berjalan (jangan reload) meski komponen di-render ulang.
+            return
+        }
+        if (!uri.isNullOrBlank()) {
+            view.webView.setTag(TAG_LAST_SOURCE_URI, uri)
+            view.webView.setTag(ZenithWebViewClient.EXPECTED_URL, uri)
+        }
+        ZenithPrivate.ensureBeforeLoad(view.webView)
+        applyUserAgent(view)
+        super.setNewSource(view, source)
+    }
+
+    /** Muat URL baru dari sisi JS (omnibox, tautan, pemulihan halaman putih). */
+    override fun loadUrl(view: RNCWebViewWrapper, url: String) {
+        view.webView.translationX = 0f
+        view.webView.alpha = 1f
+        view.webView.visibility = android.view.View.VISIBLE
+        view.webView.setTag(TAG_LAST_SOURCE_URI, url)
+        ZenithPrivate.ensureBeforeLoad(view.webView)
+        applyUserAgent(view)
+        super.loadUrl(view, url)
     }
 
     override fun onDropViewInstance(view: RNCWebViewWrapper) {
@@ -76,38 +154,6 @@ class ZenithWebViewManager : RNCWebViewManager() {
         } catch (_: Throwable) {
         }
         super.onDropViewInstance(view)
-    }
-
-    private fun loadSource(view: RNCWebViewWrapper, source: ReadableMap?) {
-        val uri = try {
-            if (source != null && source.hasKey("uri")) source.getString("uri") else null
-        } catch (_: Throwable) {
-            null
-        }
-        if (!uri.isNullOrBlank() && uri != "about:blank" && !uri.startsWith("zenith:")) {
-            view.webView.setTag(ZenithWebViewClient.EXPECTED_URL, uri)
-        }
-        super.setNewSource(view, source)
-        if (uri.isNullOrBlank() || uri == "about:blank" || uri.startsWith("zenith:")) {
-            return
-        }
-        // Sekali per URL. Mengulang loadUrl setiap navigasi membuat refresh berputar terus.
-        val forced = view.webView.getTag(ZenithWebViewClient.FORCED_URI) as? String
-        if (forced == uri) {
-            return
-        }
-        view.webView.setTag(ZenithWebViewClient.FORCED_URI, uri)
-        val current = try {
-            view.webView.url
-        } catch (_: Throwable) {
-            null
-        }
-        if (!current.isNullOrBlank() && current != uri) {
-            try {
-                view.webView.loadUrl(uri)
-            } catch (_: Throwable) {
-            }
-        }
     }
 
     override fun addEventEmitters(reactContext: ThemedReactContext, view: RNCWebViewWrapper) {
