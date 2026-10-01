@@ -149,7 +149,22 @@ kontainer React Native (`display: 'none' | 'flex'`).
 
 ---
 
-## 4. Verifikasi
+## 4. Rekomendasi lanjutan (belum diubah, sengaja)
+
+Perubahan pada v0.5.2 sengaja dibatasi agar tidak menambah risiko baru yang
+tidak bisa diuji tanpa perangkat. Dua hal berikut disarankan untuk rilis
+berikutnya:
+
+1. **Tab yang tidak aktif masih di-unmount** (`mountTabs` di `BrowserScreen.tsx`
+   hanya me-mount tab aktif). Artinya berpindah tab memuat halaman sekali lagi
+   — bukan loop, tetapi bukan perilaku browser ideal. Setelah akar masalah
+   `setNewSource` dibereskan, WebView beberapa tab bisa dibiarkan hidup
+   (mis. maksimal 3 tab terakhir, sisanya `display: none`).
+2. **`ZenithPrivate` (profil kuki)** masih memakai `ProfileStore` bila didukung
+   WebView perangkat. Di perangkat yang tidak mendukungnya, tab "privat" hanya
+   memisahkan cache/riwayat, bukan kuki.
+
+## 5. Verifikasi
 
 - `npx tsc --noEmit` — bersih.
 - `cargo test` (Rust core) — dijalankan di GitHub Actions.
