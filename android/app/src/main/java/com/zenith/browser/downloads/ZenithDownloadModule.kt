@@ -234,6 +234,7 @@ class ZenithDownloadModule(reactContext: ReactApplicationContext) :
     }
 
     fun enqueue(
+        url: String,
         filenameIn: String?,
         mime: String?,
         connections: Int,
