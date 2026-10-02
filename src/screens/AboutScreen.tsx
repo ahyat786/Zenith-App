@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { useStore } from '../state/store';
-import { spacing, useTheme } from '../theme';
+import { spacing, useTheme, type as typeScale } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import { ListSection, Row } from '../ui/kit';
 import { coreVersion, nativeAvailable } from '../core/native';
@@ -37,19 +37,19 @@ export function AboutScreen() {
             borderColor: theme.accent,
           }}>
           <Text style={{ fontSize: 32, fontWeight: '900', color: theme.accent }}>Z</Text>
-          <Text style={{ position: 'absolute', right: 12, bottom: 10, fontSize: 15 }}>🩷</Text>
+          <Text style={{ position: 'absolute', right: 12, bottom: 10, ...typeScale.bodyLarge}}>🩷</Text>
         </View>
         <Text style={{ color: theme.text, fontSize: 20, fontWeight: '800' }}>Zenith Browser</Text>
-        <Text style={{ color: theme.subtext, fontSize: 13 }}>
-          v0.8.0 • Browser shell · mesin Chromium WebView
+        <Text style={{ color: theme.subtext, ...typeScale.bodyMedium}}>
+          v0.9.0 • Browser shell · mesin Chromium WebView
         </Text>
-        <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 4, textAlign: 'center', lineHeight: 18, paddingHorizontal: 28 }}>
+        <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 4, textAlign: 'center', lineHeight: 18, paddingHorizontal: 28 }}>
           Zenith adalah browser: profil, tab, perisai, dan unduhan. Mesinnya Chromium WebView — keluarga yang sama dengan Chrome — supaya tetap secepat WebView, tanpa membawa salinan Chromium 100 MB.
         </Text>
-        <Text style={{ color: theme.accent, fontSize: 12.5, marginTop: 8, fontWeight: '700' }}>
+        <Text style={{ color: theme.accent, ...typeScale.bodySmall, marginTop: 8, fontWeight: '700' }}>
           Built with 🩷 Pistis Litae
         </Text>
-        <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 2, textAlign: 'center', paddingHorizontal: 28 }}>
+        <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 2, textAlign: 'center', paddingHorizontal: 28 }}>
           Antarmuka mengikuti panduan resmi Android: Material 3, edge-to-edge, target sentuh 48dp, dan aksesibilitas TalkBack.
         </Text>
       </View>
@@ -109,7 +109,7 @@ export function AboutScreen() {
 
       <ListSection title="Lisensi" theme={theme}>
         <View style={{ padding: spacing.md }}>
-          <Text style={{ color: theme.subtext, fontSize: 13, lineHeight: 19 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, lineHeight: 19 }}>
             Kode Zenith dilisensikan MIT. Zenith adalah proyek independen — bukan produk resmi
             Zen Browser, Via, maupun Kiwi. Nama dan proyek di atas adalah milik pemiliknya
             masing-masing, dipakai sebagai atribusi inspirasi.

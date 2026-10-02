@@ -6,7 +6,7 @@
 import React from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type { Theme } from '../theme';
-import { spacing } from '../theme';
+import { spacing, type as typeScale } from '../theme';
 import type { Screen } from '../types';
 import { Icon } from '../ui/Icon';
 
@@ -63,7 +63,7 @@ export function SettingsHome({
               // tidak memotong teks saat pengguna memakai skala huruf besar.
               minHeight: 48,
               paddingVertical: 8,
-              fontSize: 15,
+              ...typeScale.bodyLarge
             }}
           />
         </View>
@@ -92,8 +92,8 @@ export function SettingsHome({
           <Icon name="user" size={24} color={theme.onAccent} />
         </View>
         <View style={{ marginLeft: 14, flex: 1 }}>
-          <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>Profil</Text>
-          <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 3, lineHeight: 18 }}>
+          <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700' }}>Profil</Text>
+          <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, marginTop: 3, lineHeight: 18 }}>
             Akun terpisah di perangkat ini. Tab tiap profil tetap tersimpan.
           </Text>
         </View>
@@ -122,11 +122,11 @@ export function SettingsHome({
             })}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.text, fontSize: 16, fontWeight: row.id === 'tentang' ? '700' : '400' }}>
+                <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: row.id === 'tentang' ? '700' : '400' }}>
                   {row.title}
                 </Text>
                 {row.subtitle ? (
-                  <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 2 }}>{row.subtitle}</Text>
+                  <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, marginTop: 2 }}>{row.subtitle}</Text>
                 ) : null}
               </View>
               {row.id === 'tentang' ? (

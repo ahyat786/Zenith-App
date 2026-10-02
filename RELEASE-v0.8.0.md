@@ -135,11 +135,11 @@ skala ekstrem. Ini pekerjaan mekanis yang akan saya cicil, bukan klaim selesai.
 | `.github/workflows/android.yml` | Langkah uji menjalankan semua `eval/check-v*.js` |
 | `android/app/build.gradle` | versionCode 22 / "0.8.0" |
 
-## 7. Rekomendasi lanjutan
+## 7. Rekomendasi lanjutan (status per v0.9.0)
 
-1. **Konversi literal `fontSize` ke type scale M3** (±150 titik, bertahap).
-2. **Posisi gulir per tab** — simpan `window.scrollY` per URL, pulihkan saat
-   halaman dimuat (melengkapi histori yang sudah ada).
+1. ✅ **Konversi literal `fontSize` ke type scale M3** — 122 titik dikonversi,
+   5 dibiarkan dengan alasan (`RELEASE-v0.9.0.md` §3).
+2. ✅ **Posisi gulir per tab** — diterapkan (`src/browser/scrollMemory.ts`).
 3. **Dialog konfirmasi keluar** untuk "Tutup semua tab" dengan Snackbar
    "Urungkan" (bukan hanya toast).
 4. **Uji perangkat** untuk jalur pemulihan histori (daftar di §5) — satu-satunya

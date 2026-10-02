@@ -493,7 +493,7 @@ export function BrowserScreen() {
             selected={active}
             label={count > 0 ? `${ws.name} · ${count}` : ws.name}
             accessibilityLabel={`Workspace ${ws.name}, ${count} tab`}
-            leading={<Text style={{ fontSize: 14 }}>{ws.icon}</Text>}
+            leading={<Text style={{ ...typeScale.bodyMedium}}>{ws.icon}</Text>}
             onPress={() => {
               releaseBlankTab();
               dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: ws.id });
@@ -722,8 +722,8 @@ export function BrowserScreen() {
       {activeTab?.incognito ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingBottom: 4 }}>
           <Icon name="eyeOff" size={13} color={theme.accent} />
-          <Text style={{ color: theme.accent, fontSize: 11.5, fontWeight: '800', marginLeft: 6 }}>MODE PRIVAT</Text>
-          <Text style={{ color: theme.subtext, fontSize: 11.5, marginLeft: 8, flex: 1 }} numberOfLines={1}>
+          <Text style={{ color: theme.accent, ...typeScale.bodySmall, fontWeight: '800', marginLeft: 6 }}>MODE PRIVAT</Text>
+          <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginLeft: 8, flex: 1 }} numberOfLines={1}>
             Tidak masuk riwayat
           </Text>
         </View>
@@ -1015,10 +1015,10 @@ export function BrowserScreen() {
         ) : wsEmptyButTabsExist && !splitActive ? (
           <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: theme.bg }]}>
             <Icon name="folder" size={40} color={theme.subtext} />
-            <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700', marginTop: 12, textAlign: 'center' }}>
+            <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700', marginTop: 12, textAlign: 'center' }}>
               Tidak ada tab di workspace ini
             </Text>
-            <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
+            <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, marginTop: 4, textAlign: 'center' }}>
               Tab di workspace lain tetap terbuka di memori. Pindah workspace untuk kembali tanpa memuat ulang.
             </Text>
           </View>
@@ -1060,7 +1060,7 @@ export function BrowserScreen() {
               style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
               <Icon name="download" size={18} color={theme.accent} />
               <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text numberOfLines={1} style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
+                <Text numberOfLines={1} style={{ color: theme.text, ...typeScale.bodyMedium, fontWeight: '700' }}>
                   {download.filename || 'Mengunduh…'}
                 </Text>
                 <View style={{ height: 4, backgroundColor: theme.surfaceVariant, borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
@@ -1076,7 +1076,7 @@ export function BrowserScreen() {
                     }}
                   />
                 </View>
-                <Text style={{ color: theme.subtext, fontSize: 11, marginTop: 2 }}>
+                <Text style={{ color: theme.subtext, ...typeScale.labelSmall, fontWeight: '400', marginTop: 2 }}>
                   {download.done === 0
                     ? 'Menunggu data'
                     : download.total > 0
@@ -1183,7 +1183,7 @@ export function BrowserScreen() {
       />
       <Sheet visible={profilesOpen} onClose={() => setProfilesOpen(false)} title="Profil" theme={theme}>
         <View style={{ padding: spacing.lg, gap: 8 }}>
-          <Text style={{ color: theme.subtext, fontSize: 13, lineHeight: 19, marginBottom: 4 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, lineHeight: 19, marginBottom: 4 }}>
             Pindah profil tidak menutup tab. Setiap profil menyimpan sesinya sendiri.
           </Text>
           {state.profiles.map((p) => {
@@ -1218,10 +1218,10 @@ export function BrowserScreen() {
                   <Text style={{ color: '#fff', fontWeight: '800' }}>{p.name.slice(0, 1).toUpperCase()}</Text>
                 </View>
                 <View style={{ marginLeft: 12, flex: 1 }}>
-                  <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15 }}>{p.name}</Text>
-                  <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 2 }}>{n} tab tersimpan</Text>
+                  <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700'}}>{p.name}</Text>
+                  <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 2 }}>{n} tab tersimpan</Text>
                 </View>
-                {on ? <Text style={{ color: p.color, fontWeight: '800', fontSize: 12 }}>AKTIF</Text> : null}
+                {on ? <Text style={{ color: p.color, ...typeScale.bodySmall, fontWeight: '800'}}>AKTIF</Text> : null}
               </Pressable>
             );
           })}

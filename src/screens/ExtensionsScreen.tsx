@@ -11,7 +11,7 @@ import React, { useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import JSZip from 'jszip';
 import { useStore } from '../state/store';
-import { spacing, useTheme } from '../theme';
+import { spacing, useTheme, type as typeScale } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import {
   ActionSheet,
@@ -201,9 +201,9 @@ export function ExtensionsScreen() {
           subtitle={`v${ext.version} • MV${ext.manifestVersion} • ${ext.contentScripts.length} skrip konten${ext.hasBackground ? ' • latar ⚠️' : ''}`}
           right={
             ext.enabled ? (
-              <Text style={{ color: theme.ok, fontWeight: '800', fontSize: 12.5 }}>AKTIF</Text>
+              <Text style={{ color: theme.ok, ...typeScale.bodySmall, fontWeight: '800'}}>AKTIF</Text>
             ) : (
-              <Text style={{ color: theme.subtext, fontWeight: '800', fontSize: 12.5 }}>MATI</Text>
+              <Text style={{ color: theme.subtext, ...typeScale.bodySmall, fontWeight: '800'}}>MATI</Text>
             )
           }
           onPress={() => setDetail(ext)}
@@ -241,7 +241,7 @@ export function ExtensionsScreen() {
             placeholder="https://…/ekstensi.zip"
             keyboardType="url"
           />
-          <Text style={{ color: theme.subtext, fontSize: 12, marginBottom: 12 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginBottom: 12 }}>
             Ekstensi berisi manifest.json (MV2/MV3). Content scripts (js/css) akan disuntik
             otomatis sesuai pola matches. Unduh zip ekstensi dari CWS atau sumber lain.
           </Text>
@@ -253,7 +253,7 @@ export function ExtensionsScreen() {
       <Sheet visible={!!detail} onClose={() => setDetail(null)} title={detail?.name} theme={theme}>
         {detail ? (
           <View style={{ padding: spacing.lg, gap: 12 }}>
-            <Text style={{ color: theme.subtext, fontSize: 13.5, lineHeight: 19 }}>
+            <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, lineHeight: 19 }}>
               {detail.description ?? 'Tanpa deskripsi.'}
             </Text>
             <Info theme={theme} label="Versi" value={`v${detail.version} (Manifest V${detail.manifestVersion})`} />
@@ -276,7 +276,7 @@ export function ExtensionsScreen() {
             />
             <Info theme={theme} label="Berkas dimuat" value={`${Object.keys(detail.files).length} berkas`} />
             {detail.hasBackground ? (
-              <Text style={{ color: theme.warn, fontSize: 12.5, lineHeight: 18 }}>
+              <Text style={{ color: theme.warn, ...typeScale.bodySmall, lineHeight: 18 }}>
                 ⚠️ Ekstensi ini punya latar (service worker/scripts) — tidak dijalankan di WebView.
                 Hanya content scripts yang aktif.
               </Text>
@@ -315,10 +315,10 @@ export function ExtensionsScreen() {
 function Info({ label, value, theme }: { label: string; value: string; theme: any }) {
   return (
     <View>
-      <Text style={{ color: theme.subtext, fontSize: 11.5, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <Text style={{ color: theme.subtext, ...typeScale.bodySmall, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
         {label}
       </Text>
-      <Text style={{ color: theme.text, fontSize: 13.5, lineHeight: 19 }}>{value}</Text>
+      <Text style={{ color: theme.text, ...typeScale.bodyMedium, lineHeight: 19 }}>{value}</Text>
     </View>
   );
 }

@@ -38,7 +38,7 @@ class ZenithWebViewManager : RNCWebViewManager() {
         private const val TAG_LAST_SOURCE_URI = 0x5e417010
         private const val TAG_CUSTOM_UA = 0x5e417011
         private const val TAG_APP_NAME_UA = 0x5e417012
-        private const val FALLBACK_APP_VERSION = "Zenith/0.8.0"
+        private const val FALLBACK_APP_VERSION = "Zenith/0.9.0"
         private val REGEX_MARKER = Regex("\\s(?:zp|zt):")
         private val REGEX_PROFILE = Regex("zp:([^\\s]+)")
         private val REGEX_TAB = Regex("zt:([^\\s]+)")

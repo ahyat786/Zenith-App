@@ -18,11 +18,19 @@ import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTyp
 const Wv: any = WebViewComponent;
 import type { Tab } from '../types';
 import type { Theme } from '../theme';
+import { type as typeScale } from '../theme';
 import { useStore } from '../state/store';
 import { BRIDGE_SCRIPT, joinPayload } from '../core/inject';
 import { shieldBootScript } from '../core/shield';
 import { adblockShouldBlock, restoreTabState, saveTabState } from '../core/native';
 import { RESTORE_PLACEHOLDER, restoreSourceUri, shouldAttemptRestore } from './tabRestore';
+import {
+  getScroll,
+  putScroll,
+  REPORT_SCROLL_SCRIPT,
+  restoreScrollScript,
+  shouldRestoreScroll,
+} from './scrollMemory';
 import { DESKTOP_INJECT_SCRIPT, DESKTOP_UA, isDesktopUa } from '../core/desktop';
 import { planCached } from '../core/plan';
 import { webviewRefs } from './refs';
@@ -44,6 +52,12 @@ interface Props {
   active: boolean;
   theme: Theme;
 }
+
+/**
+ * Ingatan gulir untuk seluruh sesi (semua tab). Sengaja di lingkup modul:
+ * WebView tab dilepas-pasang oleh keep-alive, ingatan ini harus bertahan.
+ */
+const scrollMemory = new Map<string, number>();
 
 export function TabView({ tab, active, theme }: Props) {
   const { state, fullState, dispatch, siteConfigFor, openNewTab } = useStore();
@@ -101,9 +115,28 @@ export function TabView({ tab, active, theme }: Props) {
 
   const source = useRef({ uri: RESTORE_PLACEHOLDER }).current;
   source.uri = sourceUri;
+
+  /** Sekali per pemuatan: tanya ukuran dokumen supaya pemulihan berbasis data. */
+  const askMetrics = useCallback(() => {
+    const wv = webviewRefs.get(tab.id);
+    if (!wv) {
+      return;
+    }
+    try {
+      wv.injectJavaScript(
+        "(function(){try{var de=document.documentElement||{};" +
+          "if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(" +
+          "JSON.stringify({type:'zen:metrics',h:de.scrollHeight||0,vh:window.innerHeight||0,url:location.href}));" +
+          "}catch(e){}})();true;",
+      );
+    } catch {
+      // WebView belum siap — pemulihan dilewati, bukan kesalahan
+    }
+  }, [tab.id]);
   const lastHistoryUrl = useRef<string>('');
   const injectGen = useRef(0);
   const loadedOnce = useRef(false);
+  const metricsReady = useRef(false);
   const tabRef = useRef(tab);
   tabRef.current = tab;
 
@@ -196,7 +229,16 @@ export function TabView({ tab, active, theme }: Props) {
   }, [recoverIfBlank, tab.id]);
 
   useEffect(() => {
-    return () => cancelBlankProbe(tab.id);
+    return () => {
+      // Tab akan dilepas (keep-alive) / ditutup: minta posisi gulir terakhir
+      // supaya ingatan tidak tertinggal pada laporan throttle terakhir.
+      try {
+        webviewRefs.get(tab.id)?.injectJavaScript(REPORT_SCROLL_SCRIPT);
+      } catch {
+        // WebView sudah hilang — tidak masalah
+      }
+      cancelBlankProbe(tab.id);
+    };
   }, [tab.id]);
 
   // ---------------- injeksi per fase ----------------
@@ -258,6 +300,29 @@ export function TabView({ tab, active, theme }: Props) {
         case 'zen:docidle':
           injectPhase('idle', msg.url || sourceUrl);
           break;
+        case 'zen:metrics': {
+          /*
+           * Tinggi dokumen & viewport datang dari halaman; pemulihan gulir
+           * hanya dijalankan bila halaman memang bisa digulir. Sekali per
+           * pemuatan — dan injeksi `scrollTo` tidak pernah memicu navigasi,
+           * jadi jaminan anti-refresh tetap utuh.
+           */
+          if (metricsReady.current) {
+            break;
+          }
+          const mUrl = String(msg.url || '');
+          if (!shouldRestoreScroll(scrollMemory, mUrl, Number(msg.h), Number(msg.vh))) {
+            break;
+          }
+          metricsReady.current = true;
+          webviewRefs.get(tab.id)?.injectJavaScript(restoreScrollScript(getScroll(scrollMemory, mUrl)));
+          break;
+        }
+        case 'zen:scroll': {
+          // Ingatan gulir per URL (dipakai saat WebView dibangun ulang).
+          putScroll(scrollMemory, String(msg.url || ''), Number(msg.y));
+          break;
+        }
       case 'zen:health':
         noteBlankProbeResult(tab.id, String(msg.token || ''), !!msg.dead, String(msg.href || ''), tab.url);
         break;
@@ -419,6 +484,9 @@ export function TabView({ tab, active, theme }: Props) {
         onLoadEnd={() => {
           loadedOnce.current = true;
           dispatch({ type: 'UPDATE_TAB', id: tab.id, patch: { loading: false, progress: 1 } });
+          // Pemuatan baru: izinkan satu pemulihan gulir untuk URL ini.
+          metricsReady.current = false;
+          askMetrics();
         }}
         cacheEnabled
         onOpenWindow={(e: any) => {
@@ -448,10 +516,10 @@ export function TabView({ tab, active, theme }: Props) {
               gap: 12,
             }}>
             <Icon name="warning" size={40} color={theme.warn} />
-            <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700', textAlign: 'center' }}>
+            <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700', textAlign: 'center' }}>
               Tidak dapat memuat halaman
             </Text>
-            <Text style={{ color: theme.subtext, fontSize: 13, textAlign: 'center' }}>
+            <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, textAlign: 'center' }}>
               Periksa koneksi internet Anda lalu coba lagi.
             </Text>
             <View style={{ marginTop: 8 }}>
@@ -479,7 +547,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent={`Zenith/0.8.0 zp:${tab.profileId || 'profile-utama'} zt:${tab.id}`}
+        applicationNameForUserAgent={`Zenith/0.9.0 zp:${tab.profileId || 'profile-utama'} zt:${tab.id}`}
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

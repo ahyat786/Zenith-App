@@ -304,7 +304,7 @@ export function IconButton({
             justifyContent: 'center',
             paddingHorizontal: 3,
           }}>
-          <Text style={{ color: theme.onAccent, fontSize: 10, fontWeight: '700' }}>
+          <Text style={{ color: theme.onAccent, ...type.labelSmall, fontWeight: '700' }}>
             {typeof badge === 'number' && badge > 99 ? '99+' : badge}
           </Text>
         </View>

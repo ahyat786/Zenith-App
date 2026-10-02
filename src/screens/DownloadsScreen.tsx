@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useStore } from '../state/store';
-import { spacing, useTheme } from '../theme';
+import { spacing, useTheme, type as typeScale } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import { Button, EmptyState, IconButton, ListSection, Row, TextField } from '../ui/kit';
 import { Icon } from '../ui/Icon';
@@ -201,7 +201,7 @@ export function DownloadsScreen() {
 
       {/* Info Ruang Terpakai ala Brave */}
       <View style={{ paddingHorizontal: spacing.lg, paddingTop: 10, paddingBottom: 6 }}>
-        <Text style={{ color: theme.subtext, fontSize: 13, fontWeight: '500' }}>
+        <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, fontWeight: '500' }}>
           {fmtBytes(totalUsedBytes)} terpakai di perangkat
         </Text>
       </View>
@@ -233,7 +233,7 @@ export function DownloadsScreen() {
                 <Text
                   style={{
                     color: isSel ? theme.onAccent : theme.text,
-                    fontSize: 13,
+                    ...typeScale.bodyMedium,
                     fontWeight: isSel ? '700' : '500',
                     marginLeft: isSel ? 6 : 0,
                   }}>
@@ -269,7 +269,7 @@ export function DownloadsScreen() {
       <ListSection title={`Sedang berlangsung (${active.length})`} theme={theme}>
         {active.length === 0 ? (
           <View style={{ padding: spacing.md }}>
-            <Text style={{ color: theme.subtext, fontSize: 13.5 }}>Tidak ada unduhan aktif.</Text>
+            <Text style={{ color: theme.subtext, ...typeScale.bodyMedium}}>Tidak ada unduhan aktif.</Text>
           </View>
         ) : (
           active.map((job, i) => {
@@ -285,7 +285,7 @@ export function DownloadsScreen() {
                 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Icon name="download" size={18} color={theme.accent} />
-                  <Text numberOfLines={1} style={{ flex: 1, color: theme.text, fontSize: 14, fontWeight: '700', marginLeft: 10 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, color: theme.text, ...typeScale.bodyMedium, fontWeight: '700', marginLeft: 10 }}>
                     {job.filename}
                   </Text>
                   <Pressable hitSlop={8} onPress={() => cancelDownload(job.id)}>
@@ -302,7 +302,7 @@ export function DownloadsScreen() {
                     }}
                   />
                 </View>
-                <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 5 }}>
+                <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 5 }}>
                   {job.done <= 0
                     ? 'Menunggu data…'
                     : `${pct >= 0 ? pct + '% · ' : ''}${fmtBytes(job.done)}${job.total > 0 ? ' / ' + fmtBytes(job.total) : ''}${speed ? ' · ' + speed : ''}`}
@@ -354,7 +354,7 @@ export function DownloadsScreen() {
                 }
                 setTimeout(refresh, 200);
               }}>
-              <Text style={{ color: theme.subtext, fontSize: 12, fontWeight: '700' }}>Bersihkan</Text>
+              <Text style={{ color: theme.subtext, ...typeScale.bodySmall, fontWeight: '700' }}>Bersihkan</Text>
             </Pressable>
           }>
           {failed.map((job) => (
@@ -377,12 +377,12 @@ export function DownloadsScreen() {
 
       {done.length === 0 && failed.length === 0 ? (
         <View style={{ padding: spacing.lg }}>
-          <Text style={{ color: theme.subtext, fontSize: 13.5 }}>Belum ada riwayat unduhan.</Text>
+          <Text style={{ color: theme.subtext, ...typeScale.bodyMedium}}>Belum ada riwayat unduhan.</Text>
         </View>
       ) : null}
 
       <View style={{ padding: spacing.lg }}>
-        <Text style={{ color: theme.subtext, fontSize: 12, lineHeight: 18 }}>
+        <Text style={{ color: theme.subtext, ...typeScale.bodySmall, lineHeight: 18 }}>
           Riwayat tetap ada setelah aplikasi ditutup. Berkas selesai disimpan di Download/Zenith dan bisa dibuka dari aplikasi File.
           Hapus dari daftar tidak menghapus berkas; pilih hapus berkas bila ingin menghilangkannya.
         </Text>

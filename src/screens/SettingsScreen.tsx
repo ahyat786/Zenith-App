@@ -10,7 +10,7 @@ import { Icon } from '../ui/Icon';
 import { SettingsHome, type SettingsPanel, type SettingsRow } from './SettingsHome';
 
 import { useStore } from '../state/store';
-import { spacing, useTheme } from '../theme';
+import { spacing, useTheme, type as typeScale } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import { showSnackbar } from '../ui/Snackbar';
 import {
@@ -177,7 +177,7 @@ export function SettingsScreen() {
   const engineName = s.engines.find((e) => e.id === s.defaultEngineId)?.name ?? 'Mesin pencari';
   const themeLabel = s.theme === 'dark' ? 'Gelap' : s.theme === 'light' ? 'Terang' : 'Mengikuti sistem';
   const settingsRows: SettingsRow[] = [
-    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.8.0 · Browser Cepat & Privat', screen: 'about' },
+    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.9.0 · Browser Cepat & Privat', screen: 'about' },
     { id: 'umum', title: 'Umum', subtitle: themeLabel, panel: 'tampilan' },
     { id: 'cari', title: 'Cari', subtitle: engineName, panel: 'cari' },
     { id: 'tab', title: 'Tab', subtitle: s.barPosition === 'top' ? 'Bar di atas' : 'Bar di bawah', panel: 'tab' },
@@ -236,7 +236,7 @@ export function SettingsScreen() {
       {panel === 'tampilan' || panel === 'tab' ? (
       <ListSection title={panel === 'tab' ? 'Tab' : 'Tampilan'} theme={theme}>
         <View style={{ paddingHorizontal: spacing.md, paddingTop: 10 }}>
-          <Text style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '600', marginBottom: 6 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodySmall, fontWeight: '600', marginBottom: 6 }}>
             Tema
           </Text>
           <SegmentedControl
@@ -275,7 +275,7 @@ export function SettingsScreen() {
           }}
         />
         <View style={{ paddingHorizontal: spacing.md, paddingTop: 12 }}>
-          <Text style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '600', marginBottom: 6 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodySmall, fontWeight: '600', marginBottom: 6 }}>
             Posisi bar alat
           </Text>
           <SegmentedControl
@@ -434,7 +434,7 @@ export function SettingsScreen() {
       {panel === 'jaringan' ? (
       <ListSection title="Jaringan & DNS Aman (Shield Guard)" theme={theme}>
         <View style={{ paddingHorizontal: spacing.md, paddingTop: 10, paddingBottom: 4 }}>
-          <Text style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '600', marginBottom: 8 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodySmall, fontWeight: '600', marginBottom: 8 }}>
             Preset kelompok server
           </Text>
           <SegmentedControl
@@ -453,7 +453,7 @@ export function SettingsScreen() {
             ]}
           />
           {dns.preset === 'custom' ? (
-            <Text style={{ color: theme.subtext, fontSize: 11.5, marginTop: 6 }}>
+            <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 6 }}>
               Susunan kustom — ubah slot server di bawah untuk menyesuaikan.
             </Text>
           ) : null}
@@ -466,8 +466,8 @@ export function SettingsScreen() {
         ]).map((g) => (
           <View key={g.key} style={{ paddingHorizontal: spacing.md, paddingTop: 10 }}>
             <View style={{ backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border, padding: 10 }}>
-              <Text style={{ color: theme.text, fontSize: 13.5, fontWeight: '800' }}>{g.title}</Text>
-              <Text style={{ color: theme.subtext, fontSize: 11.5, marginBottom: 4 }}>{g.hint}</Text>
+              <Text style={{ color: theme.text, ...typeScale.bodyMedium, fontWeight: '800' }}>{g.title}</Text>
+              <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginBottom: 4 }}>{g.hint}</Text>
               {g.ids.map((id, i) => {
                 const d = dnsServerById(id);
                 return (
@@ -493,10 +493,10 @@ export function SettingsScreen() {
                       }}
                     />
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.text, fontSize: 13.5, fontWeight: '700' }}>
+                      <Text style={{ color: theme.text, ...typeScale.bodyMedium, fontWeight: '700' }}>
                         {d?.name ?? 'Pilih server…'}
                       </Text>
-                      <Text style={{ color: theme.subtext, fontSize: 11.5 }}>
+                      <Text style={{ color: theme.subtext, ...typeScale.bodySmall}}>
                         {d ? `${d.type} • ${d.ip ?? d.endpoint.replace(/^https?:\/\//, '')} : ${d.port}` : 'ketuk untuk memilih'}
                         {d?.note ? ` — ${d.note}` : ''}
                       </Text>
@@ -512,8 +512,8 @@ export function SettingsScreen() {
         {/* --- uji resolusi --- */}
         <View style={{ paddingHorizontal: spacing.md, paddingTop: 12 }}>
           <View style={{ backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border, padding: 10 }}>
-            <Text style={{ color: theme.text, fontSize: 13.5, fontWeight: '800' }}>Uji resolusi DNS (DoH)</Text>
-            <Text style={{ color: theme.subtext, fontSize: 11.5, marginBottom: 6 }}>
+            <Text style={{ color: theme.text, ...typeScale.bodyMedium, fontWeight: '800' }}>Uji resolusi DNS (DoH)</Text>
+            <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginBottom: 6 }}>
               Kueri wireformat asli (RFC 8484) — kompatibel semua server di atas.
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -527,7 +527,7 @@ export function SettingsScreen() {
                 style={{
                   flex: 1,
                   color: theme.text,
-                  fontSize: 14,
+                  ...typeScale.bodyMedium,
                   backgroundColor: theme.pill,
                   borderRadius: 10,
                   paddingHorizontal: 12,
@@ -540,7 +540,7 @@ export function SettingsScreen() {
             </View>
 
             {testing ? (
-              <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 8 }}>Menghubungi kelompok utama lalu cadangan…</Text>
+              <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 8 }}>Menghubungi kelompok utama lalu cadangan…</Text>
             ) : null}
 
             {testResult ? (
@@ -556,7 +556,7 @@ export function SettingsScreen() {
                     padding: 8,
                     marginBottom: 6,
                   }}>
-                  <Text style={{ color: theme.text, fontSize: 12.5, fontWeight: '700' }}>
+                  <Text style={{ color: theme.text, ...typeScale.bodySmall, fontWeight: '700' }}>
                     {testResult.hijacked ? '⚠️ ' : testResult.answerIp ? '✅ ' : '❌ '}
                     {testResult.verdict}
                   </Text>
@@ -572,16 +572,15 @@ export function SettingsScreen() {
                     <Text
                       style={{
                         color: e.group === 'UTAMA' ? theme.accent : theme.warn,
-                        fontSize: 10,
-                        fontWeight: '800',
+                        ...typeScale.labelSmall, fontWeight: '800',
                         width: 62,
                       }}>
                       {e.group}
                     </Text>
-                    <Text style={{ color: theme.text, fontSize: 12.5, fontWeight: '600', width: 110 }} numberOfLines={1}>
+                    <Text style={{ color: theme.text, ...typeScale.bodySmall, fontWeight: '600', width: 110 }} numberOfLines={1}>
                       {e.name}
                     </Text>
-                    <Text style={{ color: theme.subtext, fontSize: 11.5, flex: 1 }} numberOfLines={2}>
+                    <Text style={{ color: theme.subtext, ...typeScale.bodySmall, flex: 1 }} numberOfLines={2}>
                       {e.ok
                         ? e.ips.length
                           ? `${e.ms} ms • ${e.ips.slice(0, 2).join(', ')}${e.ips.length > 2 ? ` +${e.ips.length - 2}` : ''}${e.suspicious ? ' • ⚠️ IP privat/tercadang' : ''}`
@@ -665,7 +664,7 @@ export function SettingsScreen() {
       {panel === 'beranda' ? (
         <ListSection title="Laman tab baru" theme={theme}>
           <View style={{ padding: spacing.md }}>
-            <Text style={{ color: theme.subtext, fontSize: 13.5, lineHeight: 20, marginBottom: 12 }}>
+            <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, lineHeight: 20, marginBottom: 12 }}>
               Tombol + membuka laman tab baru lengkap — pencarian, pintasan, dan riwayat. Bukan hanya bilah alamat.
             </Text>
             <TextField
@@ -775,8 +774,8 @@ export function SettingsScreen() {
                   <Icon name={d.type === 'DoH' ? 'globe' : 'lock'} size={16} color={d.type === 'DoH' ? theme.accent : theme.warn} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.text, fontSize: 14, fontWeight: '700' }}>{d.name}</Text>
-                  <Text style={{ color: theme.subtext, fontSize: 11.5 }}>
+                  <Text style={{ color: theme.text, ...typeScale.bodyMedium, fontWeight: '700' }}>{d.name}</Text>
+                  <Text style={{ color: theme.subtext, ...typeScale.bodySmall}}>
                     {d.type} • {d.ip ?? d.endpoint.replace(/^https?:\/\//, '')} : {d.port}
                     {d.note ? ` — ${d.note}` : ''}
                   </Text>
@@ -799,7 +798,7 @@ export function SettingsScreen() {
             placeholder="https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
             keyboardType="url"
           />
-          <Text style={{ color: theme.subtext, fontSize: 12.5, marginBottom: 10 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginBottom: 10 }}>
             Mode:
           </Text>
           <SegmentedControl

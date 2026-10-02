@@ -193,13 +193,16 @@ group('3. Skala huruf besar (aksesibilitas 1,3–2,0)');
 // ------------------------------------------------------ 4. versi rilis
 group('4. Versi & berkas rilis');
 {
+  // Fitur rilis ini tidak boleh hilang saat versi naik → bandingkan, bukan samakan.
   const gradle = read('android/app/build.gradle');
-  ok('versionName 0.8.0', /versionName "0\.8\.0"/.test(gradle));
-  ok('versionCode 22', /versionCode 22/.test(gradle));
+  const version = (/versionName "(\d+\.\d+\.\d+)"/.exec(gradle) || [])[1] || '0.0.0';
+  const verNum = version.split('.').map(Number);
+  ok('versionName >= 0.8.0', verNum[1] >= 8, `versi: ${version}`);
+  ok('versionCode > 21', Number((/versionCode (\d+)/.exec(gradle) || [])[1] || 0) > 21);
   const manager = read('android/app/src/main/java/com/zenith/browser/webview/ZenithWebViewManager.kt');
-  ok('UA cadangan menyebut Zenith/0.8.0', /"Zenith\/0\.8\.0"/.test(manager));
+  ok('UA cadangan menyebut versi rilis', manager.includes(`"Zenith/${version}"`));
   const about = read('src/screens/AboutScreen.tsx');
-  ok('AboutScreen menampilkan v0.8.0', /v0\.8\.0/.test(about));
+  ok(`AboutScreen menampilkan v${version}`, about.includes(`v${version}`));
   ok('dokumen rilis v0.8.0 ada', fs.existsSync(path.join(ROOT, 'RELEASE-v0.8.0.md')));
   ok('uji v0.7.0 tetap ada (tidak dihapus)', fs.existsSync(path.join(ROOT, 'eval/check-v0.7.0.js')));
 

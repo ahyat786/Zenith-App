@@ -289,14 +289,14 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={{ color: theme.text, fontSize: 20, fontWeight: '800', flex: 1 }}>
               {searching ? (
-                <Text style={{ color: theme.subtext, fontSize: 16 }}>
+                <Text style={{ color: theme.subtext, ...typeScale.bodyLarge}}>
                   Hasil <Text style={{ color: theme.accent }}>{results.length}</Text>
                 </Text>
               ) : (
                 <>
                   Tab <Text style={{ color: theme.accent }}>{tabs.length}</Text>
                   {groups.length > 0 ? (
-                    <Text style={{ color: theme.subtext, fontSize: 13, fontWeight: '600' }}>
+                    <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, fontWeight: '600' }}>
                       {'  '}• {groups.length} grup
                     </Text>
                   ) : null}
@@ -357,8 +357,8 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                     borderWidth: 1,
                     borderColor: active ? theme.accent : theme.border,
                   }}>
-                  <Text style={{ fontSize: 13, marginRight: 6 }}>{ws.icon}</Text>
-                  <Text style={{ color: active ? theme.accent : theme.subtext, fontSize: 13, fontWeight: '700' }}>
+                  <Text style={{ ...typeScale.bodyMedium, marginRight: 6 }}>{ws.icon}</Text>
+                  <Text style={{ color: active ? theme.accent : theme.subtext, ...typeScale.bodyMedium, fontWeight: '700' }}>
                     {ws.name}
                   </Text>
                   {count > 0 ? (
@@ -400,7 +400,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
-              style={{ flex: 1, color: theme.text, fontSize: 14.5, paddingVertical: 9, paddingHorizontal: 8 }}
+              style={{ flex: 1, color: theme.text, ...typeScale.bodyMedium, paddingVertical: 9, paddingHorizontal: 8 }}
             />
             {query.length > 0 ? (
               <Pressable hitSlop={10} onPress={() => setQuery('')} style={{ padding: 4 }}>
@@ -416,10 +416,10 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
               {results.length === 0 ? (
                 <View style={{ alignItems: 'center', paddingVertical: 48 }}>
                   <Icon name="search" size={30} color={theme.subtext} />
-                  <Text style={{ color: theme.text, fontSize: 15, fontWeight: '700', marginTop: 10 }}>
+                  <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700', marginTop: 10 }}>
                     Tidak ada tab yang cocok
                   </Text>
-                  <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 3 }}>
+                  <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 3 }}>
                     Coba kata kunci lain dari judul atau alamat tab.
                   </Text>
                 </View>
@@ -447,7 +447,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
           ) : (
             <>
           {showAll ? (
-            <Text style={{ color: theme.warn, fontSize: 12.5, marginBottom: 10 }}>
+            <Text style={{ color: theme.warn, ...typeScale.bodySmall, marginBottom: 10 }}>
               Workspace ini kosong — menampilkan semua tab.
             </Text>
           ) : null}
@@ -485,10 +485,10 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                     <Icon name="folder" size={17} color={g.color} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15.5, fontWeight: '800' }}>
+                    <Text numberOfLines={1} style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '800' }}>
                       {g.name}
                     </Text>
-                    <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 1 }}>
+                    <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 1 }}>
                       {gTabs.length} tab
                     </Text>
                   </View>
@@ -510,7 +510,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                             justifyContent: 'center',
                             marginLeft: i === 0 ? 0 : -7,
                           }}>
-                          <Text style={{ color: hostColor(h), fontSize: 11, fontWeight: '800' }}>
+                          <Text style={{ color: hostColor(h), ...typeScale.labelSmall, fontWeight: '800' }}>
                             {h.charAt(0).toUpperCase()}
                           </Text>
                         </View>
@@ -527,7 +527,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}>
-                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>
+                        <Text style={{ color: '#fff', ...typeScale.labelSmall, fontWeight: '800' }}>
                           +{gTabs.length - 2}
                         </Text>
                       </View>
@@ -539,7 +539,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                 {expanded ? (
                   <View style={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.sm }}>
                     {gTabs.length === 0 ? (
-                      <Text style={{ color: theme.subtext, fontSize: 12.5, padding: 8 }}>
+                      <Text style={{ color: theme.subtext, ...typeScale.bodySmall, padding: 8 }}>
                         Grup kosong — tambah tab dengan tombol di bawah atau tekan-lama sebuah tab.
                       </Text>
                     ) : (
@@ -576,7 +576,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                         borderColor: g.color + '66',
                       })}>
                       <Icon name="plus" size={15} color={g.color} />
-                      <Text style={{ color: g.color, fontWeight: '800', fontSize: 13, marginLeft: 6 }}>
+                      <Text style={{ color: g.color, ...typeScale.bodyMedium, fontWeight: '800', marginLeft: 6 }}>
                         Tab baru di grup ini
                       </Text>
                     </Pressable>
@@ -591,8 +591,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
             <Text
               style={{
                 color: theme.subtext,
-                fontSize: 12,
-                fontWeight: '700',
+                ...typeScale.bodySmall, fontWeight: '700',
                 textTransform: 'uppercase',
                 letterSpacing: 0.6,
                 marginBottom: 8,
@@ -614,8 +613,8 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                 }}>
                 <Icon name="tabs" size={28} color={theme.subtext} />
               </View>
-              <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>Belum ada tab</Text>
-              <Text style={{ color: theme.subtext, fontSize: 13, marginTop: 4 }}>
+              <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700' }}>Belum ada tab</Text>
+              <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, marginTop: 4 }}>
                 Tekan “Tab baru” di bawah untuk mulai menjelajah.
               </Text>
             </View>
@@ -643,7 +642,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                 style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, marginBottom: 8 }}>
                 <Icon name="clock" size={15} color={theme.subtext} />
                 <Text
-                  style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '700', marginLeft: 6, flex: 1 }}>
+                  style={{ color: theme.subtext, ...typeScale.bodySmall, fontWeight: '700', marginLeft: 6, flex: 1 }}>
                   Item tidak aktif — {staleUngrouped.length} tab belum dipakai 7+ hari
                 </Text>
                 <Icon name={showInactive ? 'chevronDown' : 'chevronRight'} size={15} color={theme.subtext} />
@@ -685,7 +684,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                 paddingVertical: 8,
               }}>
               <Icon name="tabs" size={15} color={theme.subtext} />
-              <Text numberOfLines={1} style={{ color: theme.subtext, fontSize: 13, flex: 1, marginLeft: 8 }}>
+              <Text numberOfLines={1} style={{ color: theme.subtext, ...typeScale.bodyMedium, flex: 1, marginLeft: 8 }}>
                 “{undo.title || hostOfUrl(undo.url) || 'Tab'}” ditutup
               </Text>
               <Pressable
@@ -696,7 +695,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                   borderRadius: 8,
                   backgroundColor: theme.accentSoft,
                 }}>
-                <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 13 }}>Urungkan</Text>
+                <Text style={{ color: theme.accent, ...typeScale.bodyMedium, fontWeight: '800'}}>Urungkan</Text>
               </Pressable>
             </View>
           </View>
@@ -762,7 +761,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
               <Pressable
                 onPress={(e) => e.stopPropagation()}
                 style={{ backgroundColor: theme.surface, borderRadius: radius.lg, padding: spacing.lg }}>
-                <Text style={{ color: theme.text, fontSize: 17, fontWeight: '800', marginBottom: 12 }}>
+                <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '800', marginBottom: 12 }}>
                   {(globalThis as any).__ZENITH_EDIT_GROUP_ID ? 'Ganti nama grup' : 'Grup tab baru'}
                 </Text>
                 <TextField
@@ -774,7 +773,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                   autoCapitalize="sentences"
                   autoCorrect
                 />
-                <Text style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '600', marginBottom: 8 }}>
+                <Text style={{ color: theme.subtext, ...typeScale.bodySmall, fontWeight: '600', marginBottom: 8 }}>
                   Warna
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
@@ -901,11 +900,11 @@ function TabCard({
             justifyContent: 'center',
             marginRight: 8,
           }}>
-          <Text style={{ color: hc, fontWeight: '800', fontSize: 14 }}>
+          <Text style={{ color: hc, ...typeScale.bodyMedium, fontWeight: '800'}}>
             {host.charAt(0).toUpperCase()}
           </Text>
         </View>
-        {tab.incognito ? <Text style={{ fontSize: 12 }}>🕶</Text> : null}
+        {tab.incognito ? <Text style={{ ...typeScale.bodySmall}}>🕶</Text> : null}
         {tab.loading ? <ActivityIndicator size="small" color={theme.accent} style={{ marginLeft: 6 }} /> : null}
         <View style={{ flex: 1 }} />
         <Pressable
@@ -940,7 +939,7 @@ function TabCard({
               paddingHorizontal: 7,
               paddingVertical: 2,
             }}>
-            <Text style={{ color: groupColor ?? theme.accent, fontSize: 10.5, fontWeight: '800' }}>TAB AKTIF</Text>
+            <Text style={{ color: groupColor ?? theme.accent, ...typeScale.labelSmall, fontWeight: '800' }}>TAB AKTIF</Text>
           </View>
         ) : null}
         {groupName && groupColor ? (
@@ -955,7 +954,7 @@ function TabCard({
               marginLeft: active ? 6 : 0,
             }}>
             <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: groupColor, marginRight: 4 }} />
-            <Text numberOfLines={1} style={{ color: groupColor, fontSize: 10.5, fontWeight: '700' }}>
+            <Text numberOfLines={1} style={{ color: groupColor, ...typeScale.labelSmall, fontWeight: '700' }}>
               {groupName}
             </Text>
           </View>
@@ -978,7 +977,7 @@ function ManageWorkspaces({ theme, onClose }: { theme: Theme; onClose: () => voi
         <Pressable
           onPress={(e) => e.stopPropagation()}
           style={{ backgroundColor: theme.surface, borderRadius: radius.lg, padding: spacing.lg, maxHeight: '80%' }}>
-          <Text style={{ color: theme.text, fontSize: 17, fontWeight: '800', marginBottom: 12 }}>
+          <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '800', marginBottom: 12 }}>
             Kelola Workspace
           </Text>
           <ScrollView nestedScrollEnabled>
@@ -1005,7 +1004,7 @@ function ManageWorkspaces({ theme, onClose }: { theme: Theme; onClose: () => voi
                 <TextInput
                   value={ws.name}
                   onChangeText={(t) => dispatch({ type: 'UPDATE_WORKSPACE', id: ws.id, patch: { name: t } })}
-                  style={{ flex: 1, color: theme.text, fontSize: 15, paddingVertical: 8 }}
+                  style={{ flex: 1, color: theme.text, ...typeScale.bodyLarge, paddingVertical: 8 }}
                   placeholder="Nama workspace"
                   placeholderTextColor={theme.subtext}
                 />
@@ -1029,7 +1028,7 @@ function ManageWorkspaces({ theme, onClose }: { theme: Theme; onClose: () => voi
                 color: theme.text,
                 borderRadius: radius.sm,
                 paddingHorizontal: 12,
-                fontSize: 14.5,
+                ...typeScale.bodyMedium
               }}
             />
             <Button

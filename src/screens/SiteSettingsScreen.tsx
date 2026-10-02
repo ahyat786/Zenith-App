@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { hostOfUrl, useStore } from '../state/store';
-import { spacing, useTheme } from '../theme';
+import { spacing, useTheme, type as typeScale } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import { Button, ListSection, SegmentedControl, TextField, ToggleRow } from '../ui/kit';
 import { DESKTOP_UA, isDesktopUa } from '../core/desktop';
@@ -69,7 +69,7 @@ export function SiteSettingsScreen() {
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: 4 }}>
         {hosts.length === 0 ? (
-          <Text style={{ color: theme.subtext, fontSize: 13 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodyMedium}}>
             Belum ada situs — buka halaman dulu atau ketik host di atas.
           </Text>
         ) : (
@@ -89,8 +89,7 @@ export function SiteSettingsScreen() {
               <Text
                 style={{
                   color: selected === h ? theme.accent : theme.subtext,
-                  fontSize: 12.5,
-                  fontWeight: '700',
+                  ...typeScale.bodySmall, fontWeight: '700',
                 }}>
                 {h}
               </Text>
@@ -116,7 +115,7 @@ export function SiteSettingsScreen() {
             onValueChange={(v) => setPatch({ adblockEnabled: v })}
           />
           <View style={{ paddingHorizontal: spacing.md, paddingTop: 12 }}>
-            <Text style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '600', marginBottom: 6 }}>
+            <Text style={{ color: theme.subtext, ...typeScale.bodySmall, fontWeight: '600', marginBottom: 6 }}>
               Mode user-agent
             </Text>
             <SegmentedControl
@@ -174,7 +173,7 @@ export function SiteSettingsScreen() {
       ) : (
         <ListSection title="Cara pakai" theme={theme}>
           <View style={{ padding: spacing.md }}>
-            <Text style={{ color: theme.subtext, fontSize: 13.5, lineHeight: 20 }}>
+            <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, lineHeight: 20 }}>
               Pilih host dari daftar (situs yang pernah dibuka) atau ketik manual. Anda dapat
               mematikan JavaScript, menonaktifkan pemblokir iklan, memakai UA desktop, atau
               menyuntik CSS kustom — persis pengaturan situs Via Browser.

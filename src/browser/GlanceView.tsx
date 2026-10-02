@@ -6,7 +6,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Theme } from '../theme';
-import { radius, spacing } from '../theme';
+import { radius, spacing, type as typeScale } from '../theme';
 import { hostOfUrl, useStore } from '../state/store';
 import { WebView as WebViewComponent } from 'react-native-webview';
 
@@ -78,7 +78,7 @@ export function GlanceView({ theme }: { theme: Theme }) {
           <Icon name="eye" size={16} color={theme.accent} />
           <Text
             numberOfLines={1}
-            style={{ flex: 1, color: theme.text, fontSize: 13.5, fontWeight: '700', marginLeft: 4 }}>
+            style={{ flex: 1, color: theme.text, ...typeScale.bodyMedium, fontWeight: '700', marginLeft: 4 }}>
             {hostOfUrl(url) || url}
           </Text>
           <Pressable
@@ -129,7 +129,7 @@ export function GlanceView({ theme }: { theme: Theme }) {
           style={{
             textAlign: 'center',
             color: theme.subtext,
-            fontSize: 11.5,
+            ...typeScale.bodySmall,
             paddingVertical: 6,
             backgroundColor: theme.bar,
           }}>

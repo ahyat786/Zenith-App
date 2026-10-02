@@ -7,7 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { useStore } from '../state/store';
-import { spacing, useTheme } from '../theme';
+import { spacing, useTheme, type as typeScale } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import {
   ActionSheet,
@@ -173,13 +173,13 @@ export function ScriptsScreen() {
               }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.text, fontSize: 15.5, fontWeight: '700' }} numberOfLines={1}>
+                  <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700' }} numberOfLines={1}>
                     {script.meta.name ?? 'Tanpa nama'}
                     {script.meta.version ? (
-                      <Text style={{ color: theme.subtext, fontSize: 12 }}> v{script.meta.version}</Text>
+                      <Text style={{ color: theme.subtext, ...typeScale.bodySmall}}> v{script.meta.version}</Text>
                     ) : null}
                   </Text>
-                  <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                  <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 2 }} numberOfLines={1}>
                     {script.meta.matches.length > 0
                       ? script.meta.matches.join(', ')
                       : script.matchAll
@@ -329,7 +329,7 @@ function ScriptEditor({ script, onClose }: { script: UserScript | null; onClose:
           mono
         />
         {matchAll ? (
-          <Text style={{ color: theme.subtext, fontSize: 12, marginTop: -6, marginBottom: 8 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: -6, marginBottom: 8 }}>
             Skrip tanpa pola @match akan dijalankan di semua situs http/https.
           </Text>
         ) : null}
@@ -419,8 +419,7 @@ function MiniSwitch({
       onPress={() => onValueChange(!value)}
       style={{
         color: value ? theme.ok : theme.subtext,
-        fontWeight: '800',
-        fontSize: 13,
+        ...typeScale.bodyMedium, fontWeight: '800',
         marginLeft: 10,
       }}>
       {value ? 'AKTIF' : 'MATI'}
@@ -437,7 +436,7 @@ function Tag({ label, theme, warn }: { label: string; theme: any; warn?: boolean
         paddingHorizontal: 7,
         paddingVertical: 3,
       }}>
-      <Text style={{ color: warn ? theme.warn : theme.accent, fontSize: 11, fontWeight: '700' }}>
+      <Text style={{ color: warn ? theme.warn : theme.accent, ...typeScale.labelSmall, fontWeight: '700' }}>
         {label}
       </Text>
     </View>

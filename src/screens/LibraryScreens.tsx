@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import { hostOfUrl, useStore } from '../state/store';
-import { spacing, useTheme } from '../theme';
+import { spacing, useTheme, type as typeScale } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import { Button, IconButton, ListSection, Row, TextField } from '../ui/kit';
 import { Icon } from '../ui/Icon';
@@ -156,7 +156,7 @@ export function BookmarksScreen() {
           <Text style={{ color: theme.text, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
             Satukan semua markah favorit Anda
           </Text>
-          <Text style={{ color: theme.subtext, fontSize: 13.5, textAlign: 'center', maxWidth: 280, lineHeight: 20 }}>
+          <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, textAlign: 'center', maxWidth: 280, lineHeight: 20 }}>
             Tandai laman web yang Anda sukai dari menu bilah alamat agar dapat dibuka kembali dengan cepat.
           </Text>
         </View>
@@ -197,8 +197,8 @@ export function PasswordsScreen() {
   return (
     <ScreenShell title="Kata sandi" onBack={() => dispatch({ type: 'SET_SCREEN', screen: 'browser' })} theme={theme}>
       <View style={{ padding: spacing.lg, gap: 10 }}>
-        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>Zenith tidak menyimpan sandi</Text>
-        <Text style={{ color: theme.subtext, fontSize: 14.5, lineHeight: 21 }}>
+        <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700' }}>Zenith tidak menyimpan sandi</Text>
+        <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, lineHeight: 21 }}>
           Isi formulir di situs memakai pengelola sandi Android (Google, Samsung, atau yang Anda pilih). Tidak ada salinan sandi di aplikasi ini, dan tidak ada yang dikirim ke server Zenith.
         </Text>
       </View>
@@ -234,8 +234,8 @@ export function AccountScreen() {
   return (
     <ScreenShell title="Profil" onBack={() => dispatch({ type: 'SET_SCREEN', screen: 'browser' })} theme={theme}>
       <View style={{ padding: spacing.lg, paddingBottom: 4 }}>
-        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>Profil terpisah, di perangkat ini</Text>
-        <Text style={{ color: theme.subtext, fontSize: 13.5, lineHeight: 20, marginTop: 6 }}>
+        <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700' }}>Profil terpisah, di perangkat ini</Text>
+        <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, lineHeight: 20, marginTop: 6 }}>
           Setiap profil punya tab, riwayat, markah, skrip, ekstensi, dan kuki sendiri. Pindah profil tidak
           menghapus tab yang sedang terbuka — semuanya tetap tersimpan.
         </Text>
@@ -267,15 +267,15 @@ export function AccountScreen() {
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{p.name.slice(0, 1).toUpperCase()}</Text>
+              <Text style={{ color: '#fff', ...typeScale.bodyLarge, fontWeight: '800'}}>{p.name.slice(0, 1).toUpperCase()}</Text>
             </View>
             <View style={{ marginLeft: 12, flex: 1 }}>
-              <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>{p.name}</Text>
-              <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 2 }}>
+              <Text style={{ color: theme.text, ...typeScale.bodyLarge, fontWeight: '700' }}>{p.name}</Text>
+              <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 2 }}>
                 {n.tabs} tab tersimpan · {n.history} riwayat{on ? ' · sedang dipakai' : ''}
               </Text>
             </View>
-            {on ? <Text style={{ color: p.color, fontWeight: '800', fontSize: 12 }}>AKTIF</Text> : null}
+            {on ? <Text style={{ color: p.color, ...typeScale.bodySmall, fontWeight: '800'}}>AKTIF</Text> : null}
           </Pressable>
         );
       })}
@@ -291,7 +291,7 @@ export function AccountScreen() {
             borderRadius: 12,
             paddingHorizontal: 14,
             height: 46,
-            fontSize: 15,
+            ...typeScale.bodyLarge
           }}
         />
         <Button label="Buat profil dan pindah" theme={theme} onPress={create} />
@@ -308,7 +308,7 @@ export function AccountScreen() {
                 borderRadius: 12,
                 paddingHorizontal: 14,
                 height: 46,
-                fontSize: 15,
+                ...typeScale.bodyLarge
               }}
             />
             <Button

@@ -295,10 +295,9 @@ export function Omnibox({ theme }: { theme: Theme }) {
             style={{
               flex: 1,
               color: theme.text,
-              fontSize: 16.5,
+              ...typeScale.bodyLarge,
               paddingVertical: 12,
               paddingHorizontal: 10,
-              fontWeight: '500',
             }}
           />
           {text.length > 0 ? (

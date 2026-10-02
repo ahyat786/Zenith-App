@@ -45,6 +45,28 @@ export const BRIDGE_SCRIPT = String.raw`
   } catch (e) {}
   window.addEventListener('popstate', onUrlChange);
   window.addEventListener('hashchange', onUrlChange);
+  // -------- pelaporan posisi gulir (untuk pemulihan saat tab dibuka lagi) -----
+  (function () {
+    var lastY = window.scrollY || 0, idle = null;
+    var report = function (force) {
+      try {
+        var y = window.scrollY || document.documentElement.scrollTop || 0;
+        if (!force && Math.abs(y - lastY) < 150) return;
+        lastY = y;
+        post({ type: 'zen:scroll', y: y, url: location.href });
+      } catch (e) {}
+    };
+    window.addEventListener('scroll', function () {
+      try {
+        if (idle) clearTimeout(idle);
+        idle = setTimeout(function () { report(false); }, 800);
+      } catch (e) {}
+    }, { passive: true });
+    window.addEventListener('pagehide', function () { report(true); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') report(true);
+    });
+  })();
   document.addEventListener('DOMContentLoaded', function () { send('zen:docend'); });
   window.addEventListener('load', function () { send('zen:docidle'); });
   document.addEventListener('contextmenu', function (e) {

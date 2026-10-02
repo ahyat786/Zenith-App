@@ -206,7 +206,7 @@ export function FirefoxMenu(props: Props) {
                       borderRadius: radius.sm,
                       paddingHorizontal: 12,
                       height: sizes.touchTarget,
-                      fontSize: 15,
+                      ...typeScale.bodyLarge
                     }}
                   />
                   <Pressable
@@ -235,7 +235,7 @@ export function FirefoxMenu(props: Props) {
                 disabled={!props.canPage}
                 style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 14, opacity: props.canPage ? 1 : 0.4 }}>
                 <Icon name="monitor" size={22} color={ink} />
-                <Text style={{ flex: 1, marginLeft: 14, color: ink, fontSize: 16 }}>Situs desktop</Text>
+                <Text style={{ flex: 1, marginLeft: 14, color: ink, ...typeScale.bodyLarge}}>Situs desktop</Text>
                 <View
                   style={{
                     backgroundColor: props.desktop ? theme.primaryContainer : theme.surfaceContainerHighest,
@@ -252,8 +252,8 @@ export function FirefoxMenu(props: Props) {
               <Pressable onPress={() => setExtOpen((v) => !v)} style={rowStyle}>
                 <Icon name="puzzle" size={22} color={ink} />
                 <View style={{ flex: 1, marginLeft: 14 }}>
-                  <Text style={{ color: ink, fontSize: 16 }}>Ekstensi</Text>
-                  <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 1 }}>
+                  <Text style={{ color: ink, ...typeScale.bodyLarge}}>Ekstensi</Text>
+                  <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 1 }}>
                     {props.extensions.length > 0
                       ? `${props.extensions.length} terpasang`
                       : 'Coba ekstensi yang disarankan'}
@@ -284,7 +284,7 @@ export function FirefoxMenu(props: Props) {
                           }}>
                           <Text style={{ color: theme.accent, fontWeight: '800' }}>{ext.iconLetter || ext.name.slice(0, 1)}</Text>
                         </View>
-                        <Text numberOfLines={1} style={{ flex: 1, color: ink, fontSize: 15 }}>
+                        <Text numberOfLines={1} style={{ flex: 1, color: ink, ...typeScale.bodyLarge}}>
                           {ext.name}
                         </Text>
                         <Switch
@@ -305,7 +305,7 @@ export function FirefoxMenu(props: Props) {
               <Hairline theme={theme} />
               <Pressable onPress={() => setMoreOpen((v) => !v)} style={rowStyle}>
                 <Icon name="more" size={22} color={ink} />
-                <Text style={{ flex: 1, marginLeft: 14, color: ink, fontSize: 16 }}>Lebih banyak</Text>
+                <Text style={{ flex: 1, marginLeft: 14, color: ink, ...typeScale.bodyLarge}}>Lebih banyak</Text>
                 <View style={{ transform: [{ rotate: moreOpen ? '180deg' : '0deg' }] }}>
                   <Icon name="chevronDown" size={18} color={theme.subtext} />
                 </View>
@@ -345,8 +345,8 @@ export function FirefoxMenu(props: Props) {
                   </Text>
                 </View>
                 <View style={{ marginLeft: 12, flex: 1 }}>
-                  <Text style={{ color: ink, fontSize: 16, fontWeight: '700' }}>{activeProfile?.name ?? 'Profil'}</Text>
-                  <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 2 }}>
+                  <Text style={{ color: ink, ...typeScale.bodyLarge, fontWeight: '700' }}>{activeProfile?.name ?? 'Profil'}</Text>
+                  <Text style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 2 }}>
                     Profil terpisah · tab tetap tersimpan
                   </Text>
                 </View>
@@ -374,7 +374,7 @@ export function FirefoxMenu(props: Props) {
                         borderRadius: 999,
                         backgroundColor: on ? p.color : theme.surface2,
                       }}>
-                      <Text style={{ color: on ? '#fff' : ink, fontWeight: '700', fontSize: 12.5 }}>{p.name}</Text>
+                      <Text style={{ color: on ? '#fff' : ink, ...typeScale.bodySmall, fontWeight: '700'}}>{p.name}</Text>
                     </Pressable>
                   );
                 })}
@@ -385,7 +385,7 @@ export function FirefoxMenu(props: Props) {
               onPress={() => go(props.onSettings)}
               style={{ backgroundColor: card, borderRadius: 14, marginTop: 8, flexDirection: 'row', alignItems: 'center', padding: 14 }}>
               <Icon name="gear" size={22} color={ink} />
-              <Text style={{ marginLeft: 14, color: ink, fontSize: 16 }}>Pengaturan</Text>
+              <Text style={{ marginLeft: 14, color: ink, ...typeScale.bodyLarge}}>Pengaturan</Text>
             </Pressable>
           </ScrollView>
         </Animated.View>
@@ -417,7 +417,7 @@ function NavBtn({
   return (
     <Pressable onPress={onPress} disabled={disabled} style={{ alignItems: 'center', minWidth: 68, opacity: disabled ? 0.35 : 1 }}>
       <Icon name={icon} size={24} color={theme.text} />
-      <Text style={{ color: theme.text, fontSize: 12, marginTop: 6 }}>{label}</Text>
+      <Text style={{ color: theme.text, ...typeScale.bodySmall, marginTop: 6 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -438,7 +438,7 @@ function MenuRow({
   return (
     <Pressable onPress={onPress} disabled={disabled} style={[rowStyle, { opacity: disabled ? 0.4 : 1 }]}>
       <Icon name={icon} size={22} color={theme.text} />
-      <Text style={{ flex: 1, marginLeft: 14, color: theme.text, fontSize: 16 }}>{title}</Text>
+      <Text style={{ flex: 1, marginLeft: 14, color: theme.text, ...typeScale.bodyLarge}}>{title}</Text>
     </Pressable>
   );
 }
@@ -446,7 +446,7 @@ function MenuRow({
 function MoreItem({ theme, label, onPress }: { theme: Theme; label: string; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={{ paddingLeft: 52, paddingRight: 14, paddingVertical: 11 }}>
-      <Text style={{ color: theme.text, fontSize: 15 }}>{label}</Text>
+      <Text style={{ color: theme.text, ...typeScale.bodyLarge}}>{label}</Text>
     </Pressable>
   );
 }
@@ -475,7 +475,7 @@ function GridBtn({
         paddingVertical: 14,
       })}>
       <Icon name={icon} size={22} color={theme.text} />
-      <Text style={{ color: theme.text, fontSize: 11.5, marginTop: 6 }} numberOfLines={1}>
+      <Text style={{ color: theme.text, ...typeScale.bodySmall, marginTop: 6 }} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
