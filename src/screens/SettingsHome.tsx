@@ -86,7 +86,7 @@ export function SettingsHome({
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-          <Icon name="user" size={24} color="#fff" />
+          <Icon name="user" size={24} color={theme.onAccent} />
         </View>
         <View style={{ marginLeft: 14, flex: 1 }}>
           <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>Profil</Text>

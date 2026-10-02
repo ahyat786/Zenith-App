@@ -104,6 +104,20 @@ Yang membuat sebuah aplikasi terasa seperti browser adalah sesi, profil, kembali
 
 Batasnya jujur: service worker ekstensi dan `webRequest` tidak berjalan. Content script berjalan.
 
+## Panduan desain (v0.6.0)
+
+Antarmuka dan perilaku aplikasi mengikuti panduan resmi Android Developers:
+
+- **Material 3** — warna berbasis peran (permukaan bertingkat, primary/on-primary), *type scale*, bentuk 12/16/28, elevation, dan ripple sebagai state layer.
+- **Edge-to-edge** — status/navigation bar transparan dengan warna ikon mengikuti tema; inset keyboard dibaca dari `WindowInsets` karena `adjustResize` tidak lagi bekerja sejak Android 15.
+- **Aksesibilitas** — target sentuh ≥ 48dp di semua tombol, label untuk TalkBack, dan status "terpilih/nonaktif" yang diumumkan.
+- **Tata letak adaptif** — pintasan 4/6/8 kolom dan kartu tab 2/3/4 kolom sesuai kelas ukuran jendela (ponsel, lipat, tablet).
+- **Layar utama Android** — splash screen Android 12+ dan ikon adaptif dengan lapisan monokrom (ikon bertema Material You).
+- **WebView** — Jetpack Webkit untuk mode gelap algoritmik dan Safe Browsing, pengelolaan pop-up, histori, dan kebersihan memori.
+
+Pemeriksaan silang lengkap terhadap lima halaman resmi Android beserta daftar deviasi yang disengaja ada di
+[`DESIGN-v0.6.0.md`](./DESIGN-v0.6.0.md); audit bug ada di [`AUDIT-v0.5.2.md`](./AUDIT-v0.5.2.md).
+
 ## Pasang
 
 | | |

@@ -57,7 +57,7 @@ export function ExtensionsScreen() {
     return false;
   });
 
-  const installFromZipData = async (data: ArrayBuffer, sourceName: string) => {
+  const installFromZipData = async (data: ArrayBuffer, _sourceName?: string) => {
     const zip = await JSZip.loadAsync(data);
     const manifestFile = zip.file('manifest.json') ?? zip.file(/(^|\/)manifest\.json$/)[0];
     if (!manifestFile) {

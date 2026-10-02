@@ -228,10 +228,10 @@ export function DownloadsScreen() {
                   borderWidth: 1,
                   borderColor: isSel ? theme.accent : theme.border,
                 }}>
-                {isSel ? <Icon name="check" size={14} color="#fff" /> : null}
+                {isSel ? <Icon name="check" size={14} color={theme.onAccent} /> : null}
                 <Text
                   style={{
-                    color: isSel ? '#fff' : theme.text,
+                    color: isSel ? theme.onAccent : theme.text,
                     fontSize: 13,
                     fontWeight: isSel ? '700' : '500',
                     marginLeft: isSel ? 6 : 0,

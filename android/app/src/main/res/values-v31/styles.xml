@@ -1,12 +1,10 @@
 <resources>
 
     <!--
-      Tema aplikasi.
-      Catatan Material 3 & edge-to-edge (Android Developers):
-        · Latar jendela = warna permukaan, supaya tidak ada kedipan putih
-          saat aplikasi diluncurkan (cold start).
-        · Bilah sistem transparan; warna ikonnya diatur dari JS lewat
-          ZenithSystemBars agar ikut tema terang/gelap pengguna.
+      Android 12+ (API 31) memakai SplashScreen API: ikon aplikasi + latar
+      bertema ditampilkan sebelum React siap, lalu memudar ke konten.
+      Nilai di sini harus mengulang seluruh isi AppTheme karena kualifikasi
+      resource menggantikan definisi style, bukan menggabungkannya.
     -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
@@ -15,6 +13,10 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:windowNoTitle">true</item>
+
+        <item name="android:windowSplashScreenBackground">@color/zenith_splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/zenith_splash_icon_background</item>
     </style>
 
 </resources>

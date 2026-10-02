@@ -416,11 +416,22 @@ export function TabView({ tab, active, theme }: Props) {
           </View>
         )}
         javaScriptEnabled={siteCfg?.javascriptEnabled !== false}
+        /*
+         * Panduan WebView resmi:
+         *  · forceDarkOn — konten web mengikuti tema aplikasi (gelap/terang).
+         *    Di Android 13+ Zenith memakai "algorithmic darkening" Jetpack Webkit
+         *    (lihat ZenithWebViewManager) sehingga halaman gelap tetap terbaca.
+         *  · allowsFullscreenVideo — video HTML5 layar penuh dikelola
+         *    WebChromeClient (kelola jendela WebView).
+         *  · allowsProtectedMedia — konten DRM (L1) tetap diputar.
+         */
+        forceDarkOn={theme.dark}
+        allowsFullscreenVideo
         domStorageEnabled
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent={`Zenith/0.5.2 zp:${tab.profileId || 'profile-utama'}`}
+        applicationNameForUserAgent={`Zenith/0.6.0 zp:${tab.profileId || 'profile-utama'}`}
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

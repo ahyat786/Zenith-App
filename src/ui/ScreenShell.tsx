@@ -1,8 +1,19 @@
+/**
+ * ScreenShell — kerangka layar dengan top app bar Material 3.
+ *
+ * Rujukan resmi:
+ *  · Top app bar (64dp, judul titleLarge, tombol 48dp):
+ *    https://developer.android.com/design/ui/mobile/guides/components/material-overview
+ *  · Tata letak adaptif — konten dibatasi 720–840dp dan dipusatkan di layar lebar
+ *    (tablet/foldable), bukan direntangkan tanpa batas:
+ *    https://developer.android.com/design/ui/mobile/guides/layout-and-content/layout-basics
+ */
+
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Theme } from '../theme';
-import { spacing } from '../theme';
+import { spacing, type, type Theme } from '../theme';
+import { useAdaptiveLayout } from '../design/adaptive';
 import { IconButton } from './kit';
 
 export function ScreenShell({
@@ -23,6 +34,18 @@ export function ScreenShell({
   right?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const adaptive = useAdaptiveLayout();
+  const centered = (
+    <View
+      style={{
+        width: '100%',
+        maxWidth: adaptive.contentMaxWidth,
+        alignSelf: 'center',
+        flexGrow: 1,
+      }}>
+      {children}
+    </View>
+  );
   return (
     <View
       style={{
@@ -38,20 +61,19 @@ export function ScreenShell({
         style={{
           paddingTop: Math.max(insets.top, 8),
           backgroundColor: theme.bar,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: theme.border,
           flexDirection: 'row',
           alignItems: 'center',
           paddingHorizontal: spacing.sm,
-          paddingBottom: 8,
+          paddingBottom: 6,
+          minHeight: 64,
         }}>
-        <IconButton name="back" onPress={onBack} theme={theme} size={22} />
+        <IconButton name="back" onPress={onBack} theme={theme} size={24} label="Kembali" />
         <View style={{ flex: 1, marginLeft: 2 }}>
-          <Text numberOfLines={1} style={{ color: theme.text, fontSize: 18, fontWeight: '800' }}>
+          <Text numberOfLines={1} style={{ color: theme.text, ...type.titleLarge }}>
             {title}
           </Text>
           {subtitle ? (
-            <Text numberOfLines={1} style={{ color: theme.subtext, fontSize: 12 }}>
+            <Text numberOfLines={1} style={{ color: theme.subtext, ...type.bodySmall }}>
               {subtitle}
             </Text>
           ) : null}
@@ -62,10 +84,10 @@ export function ScreenShell({
         <ScrollView
           contentContainerStyle={{ paddingBottom: 48, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled">
-          {children}
+          {centered}
         </ScrollView>
       ) : (
-        children
+        centered
       )}
     </View>
   );

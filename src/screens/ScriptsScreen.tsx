@@ -6,14 +6,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, Text, View } from 'react-native';
-import { hostOfUrl, useStore } from '../state/store';
+import { useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
 import {
   ActionSheet,
   Button,
   EmptyState,
-  Row,
   Sheet,
   TextField,
   ToggleRow,

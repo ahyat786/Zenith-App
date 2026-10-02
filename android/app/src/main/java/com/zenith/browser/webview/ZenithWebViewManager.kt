@@ -1,6 +1,9 @@
 package com.zenith.browser.webview
 
+import android.os.Build
 import android.webkit.WebSettings
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.uimanager.ThemedReactContext
 import com.reactnativecommunity.webview.RNCWebViewManager
@@ -35,7 +38,7 @@ class ZenithWebViewManager : RNCWebViewManager() {
         private const val TAG_LAST_SOURCE_URI = 0x5e417010
         private const val TAG_CUSTOM_UA = 0x5e417011
         private const val TAG_APP_NAME_UA = 0x5e417012
-        private const val FALLBACK_APP_VERSION = "Zenith/0.5.2"
+        private const val FALLBACK_APP_VERSION = "Zenith/0.6.0"
     }
 
     override fun getName(): String = "RNCWebView"
@@ -50,7 +53,59 @@ class ZenithWebViewManager : RNCWebViewManager() {
         // State tersimpan Android bisa mengembalikan URL tanpa isi.
         view.webView.setSaveEnabled(false)
         view.webView.setSaveFromParentEnabled(false)
+        enableSafeBrowsing(view.webView)
         return view
+    }
+
+    /**
+     * Safe Browsing — praktik keamanan resmi WebView (Android Developers →
+     * Membangun aplikasi web di WebView, "Menangani navigasi halaman").
+     * Fitur ini aktif secara default pada WebView modern, tetapi dipanggil
+     * eksplisit agar perangkat lama ikut terlindungi.
+     */
+    private fun enableSafeBrowsing(webView: android.webkit.WebView) {
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
+                WebSettingsCompat.setSafeBrowsingEnabled(webView.settings, true)
+            }
+        } catch (_: Throwable) {
+            // perangkat sangat lama — abaikan
+        }
+    }
+
+    /**
+     * Mode gelap konten web.
+     *
+     * Versi bawaan react-native-webview memakai WebSettingsCompat.setForceDark
+     * (usang sejak Android 13). Bila perangkat mendukung, Zenith memakai
+     * "algorithmic darkening" Jetpack Webkit — API pengganti resmi dari
+     * AndroidX Webkit (developer.android.com/develop/ui/views/layout/webapps/webview).
+     */
+    override fun setForceDarkOn(view: RNCWebViewWrapper, enabled: Boolean) {
+        val webView = view.webView
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                WebSettingsCompat.setAlgorithmicDarkeningAllowed(webView.settings, enabled)
+                return
+            }
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P &&
+                WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)
+            ) {
+                // Perangkat Android 10–12: pakai force-dark lama.
+                WebSettingsCompat.setForceDark(
+                    webView.settings,
+                    if (enabled) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF
+                )
+                if (enabled && WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
+                    WebSettingsCompat.setForceDarkStrategy(
+                        webView.settings,
+                        WebSettingsCompat.DARK_STRATEGY_WEB_THEME_DARKENING_ONLY
+                    )
+                }
+            }
+        } catch (_: Throwable) {
+            // biarkan WebView memakai perilaku bawaan
+        }
     }
 
     override fun setIncognito(view: RNCWebViewWrapper, value: Boolean) {

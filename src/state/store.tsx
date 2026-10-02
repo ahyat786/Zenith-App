@@ -747,7 +747,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!snapshot.hydrated || !persistAllowed.current) {
       return;
     }
-    const { ui, hydrated, splitTabIds, ...persist } = snapshot;
+    // ui/hydrated/splitTabIds sengaja tidak dipersist.
+    const { ui: _ui, hydrated: _hydrated, splitTabIds: _split, ...persist } = snapshot;
     const text = JSON.stringify(persist);
     // async-storage v3: setMany, bukan multiSet.
     AsyncStorage.setMany({

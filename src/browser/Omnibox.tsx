@@ -9,25 +9,27 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Dimensions,
   Keyboard,
   Modal,
   Pressable,
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getAppState, profileTabs, useStore } from '../state/store';
 import type { Theme } from '../theme';
-import { radius, spacing } from '../theme';
+import { elevation, radius, sizes, spacing, type as typeScale } from '../theme';
+import { useImeInset } from '../core/systemUi';
 import { fetchSuggestions, fuzzyScore } from '../core/suggest';
 import { getWebView } from './refs';
 import { isNewTabUrl } from './newtab';
 import { noteBackHandled } from './backStack';
 import { beginTabNavigation, commitNavigation, freshTabId, otherTabUrls, releaseBlankTab, tabUrlLocked } from './navIntent';
 import { Icon, type IconName } from '../ui/Icon';
+import { Chip } from '../ui/kit';
 
 interface SuggestionRow {
   key: string;
@@ -44,6 +46,8 @@ export function Omnibox({ theme }: { theme: Theme }) {
   const [rows, setRows] = useState<SuggestionRow[]>([]);
   const inputRef = useRef<any>(null);
   const insets = useSafeAreaInsets();
+  const ime = useImeInset();
+  const window = useWindowDimensions();
 
   useEffect(() => {
     // autoFocus menangani mayoritas kasus; retry cadangan untuk perangkat lambat.
@@ -226,7 +230,10 @@ export function Omnibox({ theme }: { theme: Theme }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, activeEngine.id, state.settings.searchSuggestions, state.settings.recentSearches, state.history, state.bookmarks, state.tabs, activeTab?.id, omnibox.incognito]);
 
-  const screenH = Dimensions.get('window').height;
+  const screenH = window.height;
+  // Panel tidak boleh melebihi ruang di atas keyboard (Android 15+ edge-to-edge).
+  const panelMax = Math.max(220, screenH - ime - Math.max(insets.top, 10) - 24);
+  const listMax = Math.max(120, panelMax * 0.55);
 
   return (
     /* Modal native = selalu tampil di atas bar/WebView (perbaikan v0.3.2:
@@ -248,28 +255,23 @@ export function Omnibox({ theme }: { theme: Theme }) {
           top: Math.max(insets.top, 10) + 2,
           left: 10,
           right: 10,
-          backgroundColor: theme.surface,
-          borderRadius: radius.lg,
-          borderWidth: 1,
-          borderColor: theme.border,
+          backgroundColor: theme.surfaceContainerHigh,
+          borderRadius: radius.xl,
           paddingTop: 10,
           paddingBottom: 6,
-          maxHeight: screenH * 0.62,
-          elevation: 18,
-          shadowColor: '#000',
-          shadowOpacity: 0.35,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 8 },
+          maxHeight: panelMax,
+          elevation: elevation.level3,
         }}>
-        {/* baris input */}
+        {/* baris input — SearchBar Material 3 (48dp, radius penuh) */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: theme.surface2,
-            borderRadius: radius.md,
+            backgroundColor: theme.surfaceContainerHighest,
+            borderRadius: radius.pill,
             marginHorizontal: 10,
-            paddingHorizontal: 12,
+            paddingHorizontal: 14,
+            minHeight: sizes.touchTarget,
           }}>
           <Icon
             name={omnibox.incognito ? 'eyeOff' : 'search'}
@@ -300,23 +302,32 @@ export function Omnibox({ theme }: { theme: Theme }) {
             }}
           />
           {text.length > 0 ? (
-            <Pressable hitSlop={10} onPress={() => setText('')} style={{ padding: 4 }}>
-              <Icon name="close" size={17} color={theme.subtext} />
+            <Pressable
+              hitSlop={10}
+              onPress={() => setText('')}
+              accessibilityRole="button"
+              accessibilityLabel="Hapus teks"
+              android_ripple={{ color: theme.onSurface + '1f', borderless: true, radius: 20 }}
+              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="close" size={18} color={theme.subtext} />
             </Pressable>
           ) : null}
           <Pressable
             hitSlop={8}
             onPress={() => go(text)}
+            accessibilityRole="button"
+            accessibilityLabel="Buka"
+            android_ripple={{ color: theme.onAccent + '26', borderless: false }}
             style={{
               marginLeft: 6,
-              width: 34,
-              height: 34,
-              borderRadius: 17,
+              width: 36,
+              height: 36,
+              borderRadius: 18,
               backgroundColor: theme.accent,
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-            <Icon name="forward" size={16} color="#fff" />
+            <Icon name="forward" size={18} color={theme.onAccent} />
           </Pressable>
         </View>
 
@@ -325,33 +336,21 @@ export function Omnibox({ theme }: { theme: Theme }) {
           horizontal
           showsHorizontalScrollIndicator={false}
           style={{ marginTop: 8 }}
-          contentContainerStyle={{ paddingHorizontal: 10 }}>
+          contentContainerStyle={{ paddingHorizontal: 10, alignItems: 'center' }}>
           {state.settings.engines.map((engine) => {
             const active = engine.id === activeEngine.id;
             return (
-              <Pressable
-                key={engine.id}
-                onPress={() =>
-                  dispatch({ type: 'SET_SETTINGS', patch: { defaultEngineId: engine.id } })
-                }
-                style={{
-                  paddingHorizontal: 13,
-                  paddingVertical: 6,
-                  borderRadius: radius.pill,
-                  marginRight: 8,
-                  backgroundColor: active ? theme.accent : theme.surface2,
-                  borderWidth: 1,
-                  borderColor: active ? theme.accent : theme.border,
-                }}>
-                <Text
-                  style={{
-                    color: active ? '#fff' : theme.subtext,
-                    fontSize: 13,
-                    fontWeight: '700',
-                  }}>
-                  {engine.name}
-                </Text>
-              </Pressable>
+              <View key={engine.id} style={{ marginRight: spacing.sm }}>
+                <Chip
+                  theme={theme}
+                  label={engine.name}
+                  selected={active}
+                  accessibilityLabel={`Mesin pencari ${engine.name}${active ? ', aktif' : ''}`}
+                  onPress={() =>
+                    dispatch({ type: 'SET_SETTINGS', patch: { defaultEngineId: engine.id } })
+                  }
+                />
+              </View>
             );
           })}
         </ScrollView>
@@ -359,10 +358,10 @@ export function Omnibox({ theme }: { theme: Theme }) {
         <Text
           style={{
             color: theme.subtext,
-            fontSize: 11.5,
-            marginTop: 8,
+            ...typeScale.bodySmall,
+            marginTop: spacing.sm,
             marginBottom: 2,
-            marginHorizontal: 14,
+            marginHorizontal: 16,
           }}>
           {activeTab && isNewTabUrl(activeTab.url)
             ? 'Enter → buka di tab baru ini'
@@ -375,32 +374,35 @@ export function Omnibox({ theme }: { theme: Theme }) {
         <ScrollView
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
-          style={{ maxHeight: screenH * 0.38 }}>
+          style={{ maxHeight: listMax }}>
           {rows.map((row) => (
             <Pressable
               key={row.key}
               onPress={row.onPress}
-              android_ripple={{ color: theme.surface2 }}
+              accessibilityRole="button"
+              accessibilityLabel={row.subtitle ? `${row.title}. ${row.subtitle}` : row.title}
+              android_ripple={{ color: theme.onSurface + '1f', foreground: true }}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                paddingHorizontal: 14,
-                paddingVertical: 11,
+                paddingHorizontal: 16,
+                minHeight: sizes.listItem,
+                paddingVertical: 10,
               }}>
-              <View style={{ marginRight: 12 }}>
-                <Icon name={row.icon} size={18} color={theme.subtext} />
+              <View style={{ marginRight: spacing.md, width: 24, alignItems: 'center' }}>
+                <Icon name={row.icon} size={20} color={theme.onSurfaceVariant} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15 }}>
+                <Text numberOfLines={1} style={{ color: theme.text, ...typeScale.bodyLarge }}>
                   {row.title}
                 </Text>
                 {row.subtitle ? (
-                  <Text numberOfLines={1} style={{ color: theme.subtext, fontSize: 12 }}>
+                  <Text numberOfLines={1} style={{ color: theme.subtext, ...typeScale.bodySmall }}>
                     {row.subtitle}
                   </Text>
                 ) : null}
               </View>
-                <Icon name="chevronRight" size={15} color={theme.border} />
+              <Icon name="chevronRight" size={18} color={theme.outline} />
             </Pressable>
           ))}
         </ScrollView>

@@ -9,7 +9,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -19,9 +18,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { DimensionValue } from 'react-native';
 import type { Tab } from '../types';
 import type { Theme } from '../theme';
-import { radius, spacing } from '../theme';
+import { radius, spacing, type as typeScale } from '../theme';
+import { useAdaptiveLayout } from '../design/adaptive';
 import { hostOfUrl, useStore } from '../state/store';
 import { NEW_TAB_URL, isNewTabUrl } from './newtab';
 import { WORKSPACE_ICONS, uid } from '../state/defaults';
@@ -280,7 +281,8 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
           close();
         }
       }}
-      statusBarTranslucent>
+      statusBarTranslucent
+      navigationBarTranslucent>
       <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
         {/* ================= header ================= */}
         <View style={{ paddingHorizontal: spacing.md, paddingBottom: 4 }}>
@@ -368,7 +370,7 @@ export function TabSwitcher({ theme }: { theme: Theme }) {
                         paddingHorizontal: 6,
                         paddingVertical: 1,
                       }}>
-                      <Text style={{ color: active ? '#fff' : theme.subtext, fontSize: 10.5, fontWeight: '800' }}>
+                      <Text style={{ color: active ? theme.onAccent : theme.subtext, ...typeScale.labelSmall }}>
                         {count}
                       </Text>
                     </View>
@@ -862,6 +864,7 @@ function TabCard({
   onContext: () => void;
   onClose: () => void;
 }) {
+  const adaptive = useAdaptiveLayout();
   const blank = isNewTabUrl(tab.url);
   const host = blank ? 'Tab baru' : hostOfUrl(tab.url) || tab.url || 'Tab baru';
   const hc = hostColor(host);
@@ -869,14 +872,18 @@ function TabCard({
     <Pressable
       onPress={onSelect}
       onLongPress={onContext}
-      android_ripple={{ color: theme.surface2, foreground: true }}
+      accessibilityRole="button"
+      accessibilityLabel={`${blank ? 'Tab baru' : tab.title || host}${active ? ', tab aktif' : ''}`}
+      accessibilityState={{ selected: active }}
+      android_ripple={{ color: theme.onSurface + '1f', foreground: true }}
       style={({ pressed }) => ({
-        width: '47%',
+        // Kisi adaptif Material 3: 2 kolom (ponsel) · 3 (tablet kecil) · 4 (tablet besar)
+        width: `${100 / adaptive.tabColumns}%` as DimensionValue,
         flexGrow: 1,
-        backgroundColor: pressed ? theme.surface2 : theme.surface,
+        backgroundColor: pressed ? theme.surfaceContainerHigh : theme.surfaceContainer,
         borderRadius: radius.md,
         borderWidth: active ? 2 : 1,
-        borderColor: active ? groupColor ?? theme.accent : theme.border,
+        borderColor: active ? groupColor ?? theme.accent : theme.outlineVariant,
         padding: spacing.md,
         minHeight: 118,
         opacity: dimmed ? 0.62 : 1,
@@ -902,23 +909,25 @@ function TabCard({
         {tab.loading ? <ActivityIndicator size="small" color={theme.accent} style={{ marginLeft: 6 }} /> : null}
         <View style={{ flex: 1 }} />
         <Pressable
-          hitSlop={10}
+          hitSlop={12}
           onPress={onClose}
-          style={({ pressed }) => ({
-            width: 26,
-            height: 26,
-            borderRadius: 13,
+          accessibilityRole="button"
+          accessibilityLabel="Tutup tab"
+          android_ripple={{ color: theme.danger + '26', borderless: true, radius: 16 }}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: pressed ? theme.danger + '30' : 'transparent',
-          })}>
-          <Icon name="close" size={15} color={theme.subtext} />
+          }}>
+          <Icon name="close" size={16} color={theme.subtext} />
         </Pressable>
       </View>
-      <Text numberOfLines={2} style={{ color: theme.text, fontSize: 13.5, fontWeight: '600' }}>
+      <Text numberOfLines={2} style={{ color: theme.text, ...typeScale.titleSmall }}>
         {blank ? 'Tab baru' : tab.title || host}
       </Text>
-      <Text numberOfLines={1} style={{ color: theme.subtext, fontSize: 11.5, marginTop: 3 }}>
+      <Text numberOfLines={1} style={{ color: theme.subtext, ...typeScale.bodySmall, marginTop: 3 }}>
         {blank ? 'Laman tab baru' : host}
       </Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>

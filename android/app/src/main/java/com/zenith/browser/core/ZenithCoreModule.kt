@@ -29,6 +29,22 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
         const val NAME = "ZenithCore"
     }
 
+    init {
+        // Ikuti daur hidup aktivitas agar pemantau inset selalu menempel pada
+        // decorView yang benar setelah rotasi atau perubahan tema.
+        reactApplicationContext.addLifecycleEventListener(object :
+            com.facebook.react.common.LifecycleEventListener {
+            override fun onHostResume() {
+                ZenithSystemBars.bind(reactApplicationContext)
+                ZenithSystemBars.attach(reactApplicationContext.currentActivity)
+            }
+
+            override fun onHostPause() {}
+
+            override fun onHostDestroy() {}
+        })
+    }
+
     override fun getName(): String = NAME
 
     private inline fun <T> guard(promise: Promise, fallback: T, block: () -> T) {
@@ -225,6 +241,50 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun setPageHold(hold: Boolean) {
         // No-op: visibilitas tiap tab diatur oleh kontainer React Native (display: 'none' / 'flex').
+    }
+
+    // ------------------------------------------------------------------
+    // Bilah sistem & inset keyboard (Material edge-to-edge)
+    // ------------------------------------------------------------------
+
+    /**
+     * Atur warna ikon status bar/navigation bar.
+     * Dipanggil dari JS setiap tema aplikasi berubah.
+     */
+    @ReactMethod
+    fun setBarsAppearance(lightStatusBar: Boolean, lightNavBar: Boolean, promise: Promise) {
+        try {
+            ZenithSystemBars.bind(reactApplicationContext)
+            if (reactApplicationContext.currentActivity != null) {
+                ZenithSystemBars.attach(reactApplicationContext.currentActivity)
+            }
+            promise.resolve(ZenithSystemBars.applyAppearance(lightStatusBar, lightNavBar))
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    /** Mulai mengirim tinggi keyboard ke JS (event "ZenithImeInsets"). */
+    @ReactMethod
+    fun enableSystemUiTracking(promise: Promise) {
+        try {
+            ZenithSystemBars.bind(reactApplicationContext)
+            ZenithSystemBars.attach(reactApplicationContext.currentActivity)
+            ZenithSystemBars.startTracking()
+            promise.resolve(true)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    /** Tinggi keyboard saat ini dalam dp (0 bila tertutup). */
+    @ReactMethod
+    fun imeInset(promise: Promise) {
+        try {
+            promise.resolve(ZenithSystemBars.imeInsetDp())
+        } catch (_: Throwable) {
+            promise.resolve(0.0)
+        }
     }
 
     /** Pulihkan kuki v0.4.4 yang tersesat di toples Zu, tanpa menimpa toples bawaan. */

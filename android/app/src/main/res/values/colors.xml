@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Latar jendela & splash: warna permukaan M3 gelap (token surface #141218). -->
+    <color name="zenith_window_background">#141218</color>
+    <color name="zenith_splash_background">#141218</color>
+    <color name="zenith_splash_icon_background">#4F378B</color>
+</resources>

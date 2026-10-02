@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
-  Modal,
   Pressable,
   ScrollView,
   Share,
@@ -24,7 +23,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hostOfUrl, isBookmarked, useStore } from '../state/store';
-import { radius, spacing, useTheme } from '../theme';
+import { elevation, radius, sizes, spacing, type as typeScale, useTheme } from '../theme';
+import { setBarsAppearance, useImeInset } from '../core/systemUi';
 import { TabView } from './TabView';
 import { Omnibox } from './Omnibox';
 import { TabSwitcher } from './TabSwitcher';
@@ -36,7 +36,16 @@ import { consumeHardwareBack, noteBackHandled, wasBackJustHandled } from './back
 import { NEW_TAB_URL, isNewTabUrl } from './newtab';
 import { blankTabHeld, freshTabId, releaseBlankTab } from './navIntent';
 import { Icon } from '../ui/Icon';
-import { ActionSheet, IconButton, Row, Sheet, ToggleRow, type SheetAction } from '../ui/kit';
+import {
+  ActionSheet,
+  Chip,
+  Dialog,
+  IconButton,
+  Row,
+  Sheet,
+  ToggleRow,
+  type SheetAction,
+} from '../ui/kit';
 import {
   adblockClearConnectionLog,
   adblockConnectionLog,
@@ -75,6 +84,11 @@ export function BrowserScreen() {
   const { state, fullState, dispatch, switchProfile, activeTab, tabsInWorkspace, openNewTab, siteConfigFor } = useStore();
   const theme = useTheme(state.settings.theme);
   const insets = useSafeAreaInsets();
+  const imeInset = useImeInset();
+  // Warna ikon status bar & navigation bar mengikuti tema (Material edge-to-edge).
+  useEffect(() => {
+    setBarsAppearance(theme.dark);
+  }, [theme.dark]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [shieldsOpen, setShieldsOpen] = useState(false);
   const [stats, setStats] = useState<AdblockStats | null>(null);
@@ -395,12 +409,23 @@ export function BrowserScreen() {
   };
 
   // ---------- elemen bar ----------
+  // Indikator progres Material 3: tinggi 4dp, ujung membulat, ada jalur (track).
   const progressBar =
     activeTab?.loading && activeTab.progress > 0.02 && activeTab.progress < 1 ? (
-      <View style={{ height: 2.5, marginTop: 2 }}>
+      <View
+        accessibilityRole="progressbar"
+        accessibilityLabel="Memuat halaman"
+        style={{
+          height: 4,
+          marginTop: 4,
+          marginHorizontal: spacing.md,
+          borderRadius: 2,
+          backgroundColor: theme.surfaceVariant,
+          overflow: 'hidden',
+        }}>
         <View
           style={{
-            height: 2.5,
+            height: 4,
             width: `${Math.round(activeTab.progress * 100)}%`,
             backgroundColor: theme.accent,
             borderRadius: 2,
@@ -409,48 +434,33 @@ export function BrowserScreen() {
       </View>
     ) : null;
 
+  // Baris workspace memakai chip filter Material 3 (32dp, ripple, label aksesibel).
   const workspaceBar = state.settings.showWorkspaceBar && state.workspaces.length > 0 ? (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       style={{ flexGrow: 0 }}
-      contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: 4 }}>
+      contentContainerStyle={{
+        paddingHorizontal: spacing.md,
+        paddingBottom: spacing.sm,
+        gap: spacing.sm,
+      }}>
       {state.workspaces.map((ws) => {
         const active = ws.id === state.activeWorkspaceId;
         const count = state.tabs.filter((t) => t.workspaceId === ws.id).length;
         return (
-          <Pressable
+          <Chip
             key={ws.id}
+            theme={theme}
+            selected={active}
+            label={count > 0 ? `${ws.name} · ${count}` : ws.name}
+            accessibilityLabel={`Workspace ${ws.name}, ${count} tab`}
+            leading={<Text style={{ fontSize: 14 }}>{ws.icon}</Text>}
             onPress={() => {
               releaseBlankTab();
               dispatch({ type: 'SET_ACTIVE_WORKSPACE', id: ws.id });
             }}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 12,
-              paddingVertical: 5,
-              borderRadius: radius.pill,
-              marginRight: 8,
-              backgroundColor: active ? theme.accentSoft : theme.pill,
-              borderWidth: 1,
-              borderColor: active ? theme.accent : theme.border,
-            }}>
-            <Text style={{ fontSize: 12.5, marginRight: 5 }}>{ws.icon}</Text>
-            <Text
-              style={{
-                color: active ? theme.accent : theme.subtext,
-                fontSize: 12.5,
-                fontWeight: '700',
-              }}>
-              {ws.name}
-            </Text>
-            {count > 0 ? (
-              <Text style={{ color: active ? theme.accent : theme.subtext, fontSize: 11, marginLeft: 5 }}>
-                {count}
-              </Text>
-            ) : null}
-          </Pressable>
+          />
         );
       })}
     </ScrollView>
@@ -458,74 +468,75 @@ export function BrowserScreen() {
 
   const activeProfile = state.profiles.find((p) => p.id === state.activeProfileId) ?? state.profiles[0];
   const addressRow = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingTop: 2 }}>
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.sm,
+        paddingTop: 2,
+      }}>
+      {/* Profil — avatar 40dp di dalam area sentuh 48dp */}
       <Pressable
         onPress={() => setProfilesOpen(true)}
-        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`Profil ${activeProfile?.name ?? ''}: ketuk untuk ganti profil`}
+        android_ripple={{ color: theme.onSurface + '1f', borderless: true, radius: 24 }}
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 14,
-          marginRight: 6,
-          backgroundColor: activeProfile?.color ?? theme.accent,
+          width: sizes.touchTarget,
+          height: sizes.touchTarget,
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>
-          {(activeProfile?.name || 'U').slice(0, 1).toUpperCase()}
-        </Text>
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            backgroundColor: activeProfile?.color ?? theme.accent,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+          <Text style={{ color: '#fff', ...typeScale.labelMedium }}>
+            {(activeProfile?.name || 'U').slice(0, 1).toUpperCase()}
+          </Text>
+        </View>
       </Pressable>
       {/* SHIELDS */}
-      <Pressable
-        onPress={() => setShieldsOpen(true)}
+      <IconButton
+        name={adblockOn ? 'shield' : 'shieldOff'}
+        theme={theme}
+        size={20}
+        selected={adblockOn}
         disabled={!activeTab}
-        hitSlop={6}
-        style={({ pressed }) => ({
-          width: 34,
-          height: 34,
-          borderRadius: 17,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginRight: 6,
-          backgroundColor: pressed ? theme.surface2 : 'transparent',
-        })}>
-        <Icon name={adblockOn ? 'shield' : 'shieldOff'} size={19} color={adblockOn ? theme.accent : theme.subtext} />
-        {adblockOn && stats && stats.blockedCount > 0 ? (
-          <View
-            style={{
-              position: 'absolute',
-              top: -1,
-              right: -3,
-              backgroundColor: theme.accent,
-              borderRadius: 7,
-              minWidth: 14,
-              height: 14,
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingHorizontal: 3,
-            }}>
-            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>
-              {stats.blockedCount > 99 ? '99+' : stats.blockedCount}
-            </Text>
-          </View>
-        ) : null}
-      </Pressable>
+        label={adblockOn ? 'Shield Guard aktif: buka panel' : 'Shield Guard nonaktif: buka panel'}
+        onPress={() => setShieldsOpen(true)}
+        badge={
+          adblockOn && stats && stats.blockedCount > 0
+            ? stats.blockedCount > 99
+              ? '99+'
+              : stats.blockedCount
+            : undefined
+        }
+      />
 
-      {/* PILL alamat */}
+      {/* PILL alamat — bidang pencarian Material 3 (48dp, radius penuh) */}
       <Pressable
         onPress={activeTab ? openOmniboxEdit : () => openOmniboxNew()}
-        android_ripple={{ color: theme.surface2, foreground: true }}
-        style={({ pressed }) => ({
+        accessibilityRole="search"
+        accessibilityLabel={onNewTabPage ? 'Cari atau ketik alamat' : `Alamat: ${host || activeTab?.url || ''}`}
+        android_ripple={{ color: theme.onSurface + '1f', foreground: true }}
+        style={{
           flex: 1,
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: pressed ? theme.surface2 : theme.pill,
+          backgroundColor: theme.surfaceContainerHigh,
           borderRadius: radius.pill,
-          paddingHorizontal: 13,
-          height: 42,
+          paddingHorizontal: 16,
+          height: sizes.touchTarget,
           borderWidth: 1,
-          borderColor: activeTab?.incognito || isDesktopMode ? theme.accent : theme.border,
-        })}>
+          borderColor:
+            activeTab?.incognito || isDesktopMode ? theme.accent : theme.outlineVariant,
+        }}>
         {activeTab?.incognito ? (
           <Icon name="eyeOff" size={14} color={theme.accent} />
         ) : !onNewTabPage && activeTab?.url.startsWith('https://') ? (
@@ -542,7 +553,7 @@ export function BrowserScreen() {
               paddingVertical: 1,
               marginLeft: 5,
             }}>
-            <Text style={{ color: theme.accent, fontSize: 9, fontWeight: '800' }}>PRIVAT</Text>
+            <Text style={{ color: theme.accent, ...typeScale.labelSmall }}>PRIVAT</Text>
           </View>
         ) : null}
         {isDesktopMode ? (
@@ -554,17 +565,16 @@ export function BrowserScreen() {
               paddingVertical: 1,
               marginLeft: 5,
             }}>
-            <Text style={{ color: theme.accent, fontSize: 9, fontWeight: '800' }}>DESKTOP</Text>
+            <Text style={{ color: theme.accent, ...typeScale.labelSmall }}>DESKTOP</Text>
           </View>
         ) : null}
         <Text
           numberOfLines={1}
           style={{
             flex: 1,
-            color: theme.text,
-            fontSize: 14.5,
+            color: onNewTabPage ? theme.subtext : theme.text,
+            ...typeScale.bodyLarge,
             marginHorizontal: 8,
-            fontWeight: '600',
           }}>
           {onNewTabPage ? 'Cari atau ketik alamat' : host || activeTab?.url}
         </Text>
@@ -572,21 +582,14 @@ export function BrowserScreen() {
       </Pressable>
 
       {/* BOOKMARK */}
-      <Pressable
-        onPress={toggleBookmark}
+      <IconButton
+        name={bookmark ? 'starFilled' : 'star'}
+        theme={theme}
+        size={20}
         disabled={!activeTab || onNewTabPage}
-        hitSlop={6}
-        style={({ pressed }) => ({
-          width: 34,
-          height: 34,
-          borderRadius: 17,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginLeft: 6,
-          backgroundColor: pressed ? theme.surface2 : 'transparent',
-        })}>
-        <Icon name={bookmark ? 'starFilled' : 'star'} size={19} color={bookmark ? theme.warn : theme.subtext} />
-      </Pressable>
+        label={bookmark ? 'Hapus bookmark halaman ini' : 'Simpan halaman ini ke bookmark'}
+        onPress={toggleBookmark}
+      />
     </View>
   );
 
@@ -595,12 +598,14 @@ export function BrowserScreen() {
       <IconButton
         name="back"
         theme={theme}
+        label="Kembali"
         disabled={!activeTab?.canGoBack}
         onPress={() => activeTab && getWebView(activeTab.id)?.goBack()}
       />
       <IconButton
         name="forward"
         theme={theme}
+        label="Maju"
         disabled={!activeTab?.canGoForward}
         onPress={() => activeTab && getWebView(activeTab.id)?.goForward()}
       />
@@ -608,6 +613,7 @@ export function BrowserScreen() {
       <IconButton
         name={activeTab?.loading ? 'close' : 'refresh'}
         theme={theme}
+        label={activeTab?.loading ? 'Hentikan pemuatan' : 'Muat ulang halaman'}
         disabled={!activeTab || onNewTabPage}
         onPress={() => {
           if (!activeTab || onNewTabPage) {
@@ -630,49 +636,51 @@ export function BrowserScreen() {
           wv.reload();
         }}
       />
+      {/* FAB Material 3: 56dp, sudut 16dp, warna primary container */}
       <Pressable
         onPress={() => openFreshTab(!!activeTab?.incognito)}
-        hitSlop={4}
+        accessibilityRole="button"
+        accessibilityLabel={activeTab?.incognito ? 'Tab privat baru' : 'Tab baru'}
+        android_ripple={{ color: theme.onPrimaryContainer + '26', borderless: false }}
         style={({ pressed }) => ({
-          width: 46,
-          height: 46,
-          borderRadius: 23,
-          backgroundColor: pressed ? theme.accent + 'd0' : theme.accent,
+          width: sizes.fab,
+          height: sizes.fab,
+          borderRadius: radius.lg,
+          backgroundColor: theme.primaryContainer,
           alignItems: 'center',
           justifyContent: 'center',
-          elevation: 4,
+          elevation: pressed ? elevation.level2 : elevation.fab,
         })}>
-        <Icon name="plus" size={24} color="#fff" strokeWidth={2.4} />
+        <Icon name="plus" size={26} color={theme.onPrimaryContainer} strokeWidth={2.2} />
       </Pressable>
       <IconButton
         name="tabs"
         theme={theme}
+        label={`Tab terbuka: ${wsTabs.length}`}
         badge={wsTabs.length || undefined}
         onPress={() => dispatch({ type: 'SET_UI', patch: { tabSwitcher: true } })}
       />
       {/* Mode desktop per-situs */}
-      <Pressable
+      <IconButton
+        name="monitor"
+        theme={theme}
+        size={23}
+        label={isDesktopMode ? 'Matikan mode desktop' : 'Aktifkan mode desktop'}
+        selected={isDesktopMode}
         onPress={toggleDesktopMode}
-        hitSlop={4}
-        accessibilityLabel="Mode desktop"
-        style={({ pressed }) => ({
-          width: 46,
-          height: 46,
-          borderRadius: 23,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: isDesktopMode ? theme.accentSoft : pressed ? theme.surface2 : 'transparent',
-          borderWidth: 1,
-          borderColor: isDesktopMode ? theme.accent : 'transparent',
-        })}>
-        <Icon name="monitor" size={22} color={isDesktopMode ? theme.accent : theme.text} />
-      </Pressable>
-      <IconButton name="more" theme={theme} onPress={() => setMenuOpen(true)} />
+      />
+      <IconButton name="more" theme={theme} label="Menu lainnya" onPress={() => setMenuOpen(true)} />
     </View>
   );
 
   const bars = compact ? null : (
-    <View style={{ backgroundColor: activeTab?.incognito ? theme.accentSoft : theme.bar, zIndex: 20 }}>
+    <View
+      style={{
+        backgroundColor: activeTab?.incognito ? theme.accentSoft : theme.bar,
+        zIndex: 20,
+        borderTopWidth: barTop ? 0 : 1,
+        borderTopColor: theme.outlineVariant,
+      }}>
       {activeTab?.incognito ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingBottom: 4 }}>
           <Icon name="eyeOff" size={13} color={theme.accent} />
@@ -685,9 +693,21 @@ export function BrowserScreen() {
       {workspaceBar}
       {addressRow}
       {progressBar}
-      <View style={{ paddingHorizontal: spacing.xs, paddingBottom: Math.max(insets.bottom, 8), paddingTop: 4 }}>
-        {toolbar}
-      </View>
+      {/*
+        Saat keyboard terbuka di Android 15+ (edge-to-edge) jendela tidak lagi
+        mengecil, jadi bilah alat disembunyikan agar tidak tertimpa keyboard —
+        sama seperti perilaku browser sistem.
+      */}
+      {imeInset > 0 && !barTop ? null : (
+        <View
+          style={{
+            paddingHorizontal: spacing.xs,
+            paddingBottom: Math.max(insets.bottom, 8),
+            paddingTop: 4,
+          }}>
+          {toolbar}
+        </View>
+      )}
     </View>
   );
 
@@ -702,7 +722,7 @@ export function BrowserScreen() {
       return [];
     }
     return mine.filter((t) => t.id === state.activeTabId && !isNewTabUrl(t.url));
-  }, [fullState.tabs, state.activeProfileId, state.activeWorkspaceId, state.activeTabId, onNewTabPage, freshOpenId]);
+  }, [fullState.tabs, state.activeProfileId, state.activeTabId, onNewTabPage]);
 
   // ---------- panel SHIELD GUARD (Brave + log koneksi) ----------
   const shieldsSheet = (
@@ -869,6 +889,11 @@ export function BrowserScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
+      {/*
+        Edge-to-edge (wajib sejak Android 15/targetSdk 35): latar status bar
+        transparan dan warna ikonnya diatur lewat ZenithSystemBars native,
+        karena RN 0.87 tidak lagi menerima prop backgroundColor/translucent.
+      */}
       <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
 
       {barTop ? bars : null}
@@ -925,28 +950,29 @@ export function BrowserScreen() {
           <View
             style={{
               position: 'absolute',
-              bottom: 8,
-              left: 10,
-              right: 10,
-              backgroundColor: theme.surface,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: theme.border,
+              bottom: Math.max(insets.bottom, 12) + 8,
+              left: spacing.md,
+              right: spacing.md,
+              backgroundColor: theme.surfaceContainerHigh,
+              borderRadius: radius.lg,
               flexDirection: 'row',
               alignItems: 'center',
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              elevation: 8,
+              paddingHorizontal: spacing.md,
+              paddingVertical: 12,
+              elevation: elevation.level3,
             }}>
             <Pressable
               onPress={() => dispatch({ type: 'SET_SCREEN', screen: 'downloads' })}
+              accessibilityRole="button"
+              accessibilityLabel={`Unduhan ${download.filename || 'sedang berjalan'}: buka daftar unduhan`}
+              android_ripple={{ color: theme.onSurface + '1f', foreground: true }}
               style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
               <Icon name="download" size={18} color={theme.accent} />
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text numberOfLines={1} style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
                   {download.filename || 'Mengunduh…'}
                 </Text>
-                <View style={{ height: 4, backgroundColor: theme.surface2, borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                <View style={{ height: 4, backgroundColor: theme.surfaceVariant, borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
                   <View
                     style={{
                       height: 4,
@@ -970,13 +996,15 @@ export function BrowserScreen() {
               </View>
             </Pressable>
             <Pressable
-              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Sembunyikan banner unduhan"
+              android_ripple={{ color: theme.onSurface + '1f', borderless: true, radius: 24 }}
               onPress={() => {
                 dismissedBanner.current = download.id;
                 setDownload(null);
               }}
-              style={{ padding: 6 }}>
-              <Icon name="close" size={16} color={theme.subtext} />
+              style={{ width: sizes.touchTarget, height: sizes.touchTarget, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="close" size={18} color={theme.subtext} />
             </Pressable>
           </View>
         ) : null}
@@ -988,21 +1016,22 @@ export function BrowserScreen() {
       {compact ? (
         <Pressable
           onPress={() => dispatch({ type: 'SET_UI', patch: { compact: false } })}
+          accessibilityRole="button"
+          accessibilityLabel="Keluar dari mode kompak"
+          android_ripple={{ color: theme.onSurface + '1f', borderless: true, radius: 24 }}
           style={{
             position: 'absolute',
-            right: 14,
+            right: spacing.md,
             bottom: Math.max(insets.bottom, 14) + 8,
-            width: 46,
-            height: 46,
-            borderRadius: 23,
-            backgroundColor: theme.surface,
-            borderWidth: 1,
-            borderColor: theme.border,
+            width: sizes.touchTarget,
+            height: sizes.touchTarget,
+            borderRadius: sizes.touchTarget / 2,
+            backgroundColor: theme.surfaceContainerHigh,
             alignItems: 'center',
             justifyContent: 'center',
-            elevation: 6,
+            elevation: elevation.level3,
           }}>
-          <Icon name="eye" size={21} color={theme.accent} />
+          <Icon name="eye" size={22} color={theme.accent} />
         </Pressable>
       ) : null}
 
@@ -1115,176 +1144,62 @@ export function BrowserScreen() {
           </Pressable>
         </View>
       </Sheet>
-      {/* Modal Konfirmasi Unduhan Berkas */}
-      <Modal
+      {/* Dialog konfirmasi unduhan — dialog Material 3 (sudut 28dp, aksi teks) */}
+      <Dialog
         visible={!!promptReq}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPromptReq(null)}>
+        title={`Unduh berkas?${promptReq ? formatDownloadSize(promptReq.total) : ''}`}
+        theme={theme}
+        onClose={() => setPromptReq(null)}
+        actions={[
+          { label: 'Batal', onPress: () => setPromptReq(null) },
+          {
+            label: 'Unduh',
+            emphasis: true,
+            onPress: () => {
+              if (!promptReq) {
+                return;
+              }
+              const finalName = `${promptBaseName.trim() || 'berkas'}${promptExt}`;
+              startDownload(promptReq.url, finalName, promptReq.mime, 4);
+              setPromptReq(null);
+            },
+          },
+        ]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: spacing.md }}>
+          <Icon name="download" size={26} color={theme.primary} />
+          <Text style={{ color: theme.subtext, ...typeScale.bodyMedium, flex: 1 }}>
+            Periksa nama berkas, lalu simpan ke folder Unduhan.
+          </Text>
+        </View>
         <View
           style={{
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.65)',
+            flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 24,
+            borderWidth: 1,
+            borderColor: theme.outline,
+            borderRadius: radius.sm,
+            backgroundColor: theme.surfaceContainerLow,
+            paddingHorizontal: 16,
+            minHeight: sizes.textField,
           }}>
-          <View
-            style={{
-              width: '100%',
-              maxWidth: 360,
-              backgroundColor: '#1E1B24',
-              borderRadius: 28,
-              paddingHorizontal: 24,
-              paddingTop: 28,
-              paddingBottom: 24,
-              alignItems: 'center',
-              elevation: 24,
-              shadowColor: '#000',
-              shadowOpacity: 0.4,
-              shadowRadius: 16,
-            }}>
-            {/* Download Icon */}
-            <View style={{ marginBottom: 16 }}>
-              <Icon name="download" size={32} color="#FFFFFF" strokeWidth={2.2} />
-            </View>
-
-            {/* Title: Unduh berkas? (80,24 MB) */}
-            <Text
-              style={{
-                color: '#FFFFFF',
-                fontSize: 20,
-                fontWeight: '700',
-                textAlign: 'center',
-                marginBottom: 24,
-              }}>
-              Unduh berkas?{promptReq ? formatDownloadSize(promptReq.total) : ''}
-            </Text>
-
-            {/* Input Nama Berkas */}
-            <View
-              style={{
-                width: '100%',
-                borderWidth: 1,
-                borderColor: '#4A4654',
-                borderRadius: 14,
-                paddingHorizontal: 14,
-                paddingTop: 10,
-                paddingBottom: 8,
-                position: 'relative',
-                marginBottom: 18,
-              }}>
-              <Text
-                style={{
-                  position: 'absolute',
-                  top: -10,
-                  left: 14,
-                  backgroundColor: '#1E1B24',
-                  paddingHorizontal: 6,
-                  color: '#9E9AA7',
-                  fontSize: 12,
-                  fontWeight: '600',
-                }}>
-                Nama
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <TextInput
-                  value={promptBaseName}
-                  onChangeText={setPromptBaseName}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  selectTextOnFocus
-                  style={{
-                    flex: 1,
-                    color: '#FFFFFF',
-                    fontSize: 15,
-                    padding: 0,
-                    margin: 0,
-                  }}
-                />
-                {promptExt ? (
-                  <Text
-                    style={{
-                      color: '#B5B1BE',
-                      fontSize: 15,
-                      marginLeft: 2,
-                    }}>
-                    {promptExt}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-
-            {/* Target Folder: ~/Download */}
-            <View
-              style={{
-                width: '100%',
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingHorizontal: 4,
-                marginBottom: 32,
-              }}>
-              <Icon name="folder" size={22} color="#B5B1BE" />
-              <Text
-                style={{
-                  color: '#FFFFFF',
-                  fontSize: 15,
-                  fontWeight: '500',
-                  marginLeft: 12,
-                }}>
-                ~/Download
-              </Text>
-            </View>
-
-            {/* Action Buttons: Batal & Unduh */}
-            <View
-              style={{
-                width: '100%',
-                flexDirection: 'row',
-                justifyContent: 'flex-end',
-                alignItems: 'center',
-                gap: 16,
-              }}>
-              <Pressable
-                onPress={() => setPromptReq(null)}
-                hitSlop={12}
-                style={{ paddingHorizontal: 16, paddingVertical: 10 }}>
-                <Text
-                  style={{
-                    color: '#FFFFFF',
-                    fontSize: 15,
-                    fontWeight: '600',
-                  }}>
-                  Batal
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  if (!promptReq) return;
-                  const finalName = `${promptBaseName.trim() || 'berkas'}${promptExt}`;
-                  startDownload(promptReq.url, finalName, promptReq.mime, 4);
-                  setPromptReq(null);
-                }}
-                style={({ pressed }) => ({
-                  backgroundColor: pressed ? '#A88DEB' : '#B89BFC',
-                  paddingHorizontal: 28,
-                  paddingVertical: 12,
-                  borderRadius: 22,
-                  elevation: 2,
-                })}>
-                <Text
-                  style={{
-                    color: '#1E1B24',
-                    fontSize: 15,
-                    fontWeight: '700',
-                  }}>
-                  Unduh
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+          <TextInput
+            value={promptBaseName}
+            onChangeText={setPromptBaseName}
+            autoCapitalize="none"
+            autoCorrect={false}
+            selectTextOnFocus
+            accessibilityLabel="Nama berkas"
+            style={{ flex: 1, color: theme.text, ...typeScale.bodyLarge, paddingVertical: 8 }}
+          />
+          {promptExt ? (
+            <Text style={{ color: theme.subtext, ...typeScale.bodyLarge }}>{promptExt}</Text>
+          ) : null}
         </View>
-      </Modal>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.md }}>
+          <Icon name="folder" size={20} color={theme.subtext} />
+          <Text style={{ color: theme.text, ...typeScale.bodyMedium }}>~/Download</Text>
+        </View>
+      </Dialog>
 
       {state.ui.omnibox.open ? <Omnibox theme={theme} /> : null}
     </View>

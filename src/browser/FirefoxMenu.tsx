@@ -21,7 +21,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Theme } from '../theme';
+import { radius, sizes, type as typeScale, type Theme } from '../theme';
 import type { Extension } from '../types';
 import { Icon, type IconName } from '../ui/Icon';
 import { useStore } from '../state/store';
@@ -70,8 +70,9 @@ export function FirefoxMenu(props: Props) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const card = theme.dark ? '#2b2a33' : theme.surface;
-  const sheet = theme.dark ? '#1c1b22' : theme.bg;
+  // Permukaan M3: kartu = surface container, lembar = surface dengan bayangan.
+  const card = theme.surfaceContainer;
+  const sheet = theme.surfaceContainerLow;
   const ink = theme.text;
 
   const go = (fn: () => void) => {
@@ -149,7 +150,7 @@ export function FirefoxMenu(props: Props) {
           <View
             {...panResponder.panHandlers}
             style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 10, width: '100%' }}>
-            <View style={{ width: 42, height: 5, borderRadius: 2.5, backgroundColor: theme.dark ? '#5b5b66' : theme.border }} />
+            <View style={{ width: 32, height: 4, borderRadius: 2, backgroundColor: theme.outlineVariant }} />
           </View>
           <ScrollView
             onScroll={(e) => {
@@ -197,17 +198,17 @@ export function FirefoxMenu(props: Props) {
                     style={{
                       flex: 1,
                       color: ink,
-                      backgroundColor: theme.dark ? '#1c1b22' : theme.surface2,
-                      borderRadius: 10,
+                      backgroundColor: theme.surfaceContainerHighest,
+                      borderRadius: radius.sm,
                       paddingHorizontal: 12,
-                      height: 40,
+                      height: sizes.touchTarget,
                       fontSize: 15,
                     }}
                   />
                   <Pressable
                     onPress={() => query.trim() && props.onFind(query.trim())}
-                    style={{ backgroundColor: theme.accent, borderRadius: 10, paddingHorizontal: 12, height: 40, justifyContent: 'center' }}>
-                    <Text style={{ color: '#fff', fontWeight: '700' }}>Cari</Text>
+                    style={{ backgroundColor: theme.accent, borderRadius: radius.pill, paddingHorizontal: 16, height: sizes.touchTarget, justifyContent: 'center' }}>
+                    <Text style={{ color: theme.onAccent, ...typeScale.labelLarge }}>Cari</Text>
                   </Pressable>
                 </View>
               ) : null}
@@ -220,12 +221,12 @@ export function FirefoxMenu(props: Props) {
                 <Text style={{ flex: 1, marginLeft: 14, color: ink, fontSize: 16 }}>Situs desktop</Text>
                 <View
                   style={{
-                    backgroundColor: props.desktop ? theme.accent : theme.dark ? '#3a3944' : theme.surface2,
-                    borderRadius: 14,
+                    backgroundColor: props.desktop ? theme.primaryContainer : theme.surfaceContainerHighest,
+                    borderRadius: radius.pill,
                     paddingHorizontal: 14,
                     paddingVertical: 6,
                   }}>
-                  <Text style={{ color: props.desktop ? '#fff' : ink, fontWeight: '700', fontSize: 13 }}>
+                  <Text style={{ color: props.desktop ? theme.onPrimaryContainer : ink, ...typeScale.labelMedium }}>
                     {props.desktop ? 'Hidup' : 'Mati'}
                   </Text>
                 </View>
@@ -379,7 +380,7 @@ export function FirefoxMenu(props: Props) {
 const rowStyle = { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 14, paddingVertical: 13 };
 
 function Hairline({ theme }: { theme: Theme }) {
-  return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: theme.dark ? '#3f3e48' : theme.border, marginLeft: 50 }} />;
+  return <View style={{ height: 1, backgroundColor: theme.outlineVariant, marginLeft: 50 }} />;
 }
 
 function NavBtn({

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ikon splash Android 12+ (SplashScreen API).
+  Gaya Material 3: bentuk sederhana, kontras tinggi, aman di dalam lingkaran mask.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- gunung / puncak (zenith) -->
+    <path
+        android:fillColor="#FFD8E4FF"
+        android:pathData="M54,40 L84,86 L24,86 Z" />
+    <path
+        android:fillColor="#FF8B7CF6"
+        android:pathData="M54,56 L70,86 L38,86 Z" />
+    <!-- bintang di puncak -->
+    <path
+        android:fillColor="#FFFFC46B"
+        android:pathData="M54,26 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+</vector>
