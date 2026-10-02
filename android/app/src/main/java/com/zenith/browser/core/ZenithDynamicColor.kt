@@ -67,6 +67,9 @@ object ZenithDynamicColor {
             return null
         }
         val map = Arguments.createMap()
+        // ReadableMap tidak punya size(); hitung sendiri supaya tahu apakah
+        // palet benar-benar terisi (kalau kosong → JS pakai token Zenith).
+        var filled = 0
         for ((name, attr) in ROLES) {
             val argb = try {
                 MaterialColors.getColor(scoped, attr, 0)
@@ -77,7 +80,8 @@ object ZenithDynamicColor {
                 continue
             }
             map.putString(name, String.format("#%06X", 0xFFFFFF and argb))
+            filled += 1
         }
-        return if (map.size() == 0) null else map
+        return if (filled == 0) null else map
     }
 }
