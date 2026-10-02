@@ -6,10 +6,12 @@ import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import com.facebook.react.bridge.LifecycleEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import androidx.appcompat.app.AppCompatDelegate
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.module.annotations.ReactModule
 import java.io.File
@@ -32,8 +34,7 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
     init {
         // Ikuti daur hidup aktivitas agar pemantau inset selalu menempel pada
         // decorView yang benar setelah rotasi atau perubahan tema.
-        reactApplicationContext.addLifecycleEventListener(object :
-            com.facebook.react.common.LifecycleEventListener {
+        reactApplicationContext.addLifecycleEventListener(object : LifecycleEventListener {
             override fun onHostResume() {
                 ZenithSystemBars.bind(reactApplicationContext)
                 ZenithSystemBars.attach(reactApplicationContext.currentActivity)
@@ -259,6 +260,29 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
                 ZenithSystemBars.attach(reactApplicationContext.currentActivity)
             }
             promise.resolve(ZenithSystemBars.applyAppearance(lightStatusBar, lightNavBar))
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    /**
+     * Selaraskan tema Android dengan tema aplikasi.
+     *
+     * Ini penting untuk WebView: media query `prefers-color-scheme` mengikuti
+     * tema Android (isLightTheme), bukan tema internal JS. Dengan menyetel
+     * mode malam yang sama, konten web ikut gelap/terang bersama antarmuka —
+     * perilaku yang dianjurkan dokumen WebView & Material 3.
+     */
+    @ReactMethod
+    fun setNightMode(mode: String, promise: Promise) {
+        try {
+            val resolved = when (mode) {
+                "dark" -> AppCompatDelegate.MODE_NIGHT_YES
+                "light" -> AppCompatDelegate.MODE_NIGHT_NO
+                else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            }
+            AppCompatDelegate.setDefaultNightMode(resolved)
+            promise.resolve(true)
         } catch (_: Throwable) {
             promise.resolve(false)
         }

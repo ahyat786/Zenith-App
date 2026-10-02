@@ -24,7 +24,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hostOfUrl, isBookmarked, useStore } from '../state/store';
 import { elevation, radius, sizes, spacing, type as typeScale, useTheme } from '../theme';
-import { setBarsAppearance, useImeInset } from '../core/systemUi';
+import { setBarsAppearance, setNightMode, useImeInset } from '../core/systemUi';
 import { TabView } from './TabView';
 import { Omnibox } from './Omnibox';
 import { TabSwitcher } from './TabSwitcher';
@@ -85,10 +85,12 @@ export function BrowserScreen() {
   const theme = useTheme(state.settings.theme);
   const insets = useSafeAreaInsets();
   const imeInset = useImeInset();
-  // Warna ikon status bar & navigation bar mengikuti tema (Material edge-to-edge).
+  // Warna ikon status bar & navigation bar mengikuti tema (Material edge-to-edge),
+  // dan tema Android diselaraskan supaya prefers-color-scheme halaman web cocok.
   useEffect(() => {
     setBarsAppearance(theme.dark);
-  }, [theme.dark]);
+    setNightMode(state.settings.theme);
+  }, [theme.dark, state.settings.theme]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [shieldsOpen, setShieldsOpen] = useState(false);
   const [stats, setStats] = useState<AdblockStats | null>(null);

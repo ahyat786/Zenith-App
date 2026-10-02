@@ -18,6 +18,7 @@ interface ZenithCoreSystemUi {
   setBarsAppearance(lightStatusBar: boolean, lightNavBar: boolean): Promise<boolean>;
   enableSystemUiTracking(): Promise<boolean>;
   imeInset(): Promise<number>;
+  setNightMode(mode: 'dark' | 'light' | 'system'): Promise<boolean>;
 }
 
 const ZC = NativeModules.ZenithCore as ZenithCoreSystemUi | undefined;
@@ -28,6 +29,19 @@ export function setBarsAppearance(dark: boolean): void {
     ZC?.setBarsAppearance(!dark, !dark);
   } catch {
     // modul tidak tersedia — StatusBar JS tetap dipakai
+  }
+}
+
+/**
+ * Selaraskan tema Android dengan tema aplikasi.
+ * Dibutuhkan agar `prefers-color-scheme` di halaman web mengikuti tema
+ * Zenith (bukan hanya setelan sistem).
+ */
+export function setNightMode(mode: 'dark' | 'light' | 'system'): void {
+  try {
+    ZC?.setNightMode(mode);
+  } catch {
+    // abaikan
   }
 }
 
