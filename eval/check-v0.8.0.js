@@ -130,7 +130,14 @@ group('1. Histori WebView per tab (saveState/restoreState)');
   ok('@ReactMethod saveTabState ada', /fun saveTabState\(tabId: String, promise: Promise\)/.test(core));
   ok('@ReactMethod restoreTabState ada', /fun restoreTabState\(tabId: String, promise: Promise\)/.test(core));
   ok('@ReactMethod deleteTabState ada', /fun deleteTabState\(tabId: String, promise: Promise\)/.test(core));
-  ok('restore diulang sampai view native siap (bukan gagal senyap)', /attemptRestore\([\s\S]{0,700}attempt < 12/.test(core));
+  ok(
+    'restore diulang sampai view native siap (bukan gagal senyap)',
+    /attempt < 12/.test(core) && /attemptRestore\(context, tabId, attempt \+ 1, promise\)/.test(core),
+  );
+  ok(
+    'tidak ada `return` telanjang di dalam lambda postDelayed (Kotlin melarang)',
+    !/postDelayed\(\{[\s\S]{0,900}?\n\s{12,}return\b/.test(core),
+  );
   ok('tanpa state → langsung false (tanpa menunggu)', /if \(!com\.zenith\.browser\.webview\.ZenithTabState\.hasState\(context, tabId\)\)/.test(core));
   ok('semua dijalankan di UI thread', /Handler\(Looper\.getMainLooper\(\)\)\.post/.test(core));
 

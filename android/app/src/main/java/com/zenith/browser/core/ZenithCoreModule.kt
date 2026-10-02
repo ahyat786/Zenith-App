@@ -337,19 +337,23 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
         attempt: Int,
         promise: Promise,
     ) {
+        // Catatan: lambda postDelayed tidak boleh memakai `return` (bukan
+        // inline) — karena itu percabangan di bawah memakai if/else.
         Handler(Looper.getMainLooper()).postDelayed({
             try {
                 val view = com.zenith.browser.webview.ZenithTabState.findWebView(tabId)
-                if (view == null) {
-                    if (attempt < 12) {
-                        attemptRestore(context, tabId, attempt + 1, promise)
-                    } else {
-                        promise.resolve(false)
-                    }
-                    return
+                if (view != null) {
+                    val restored = com.zenith.browser.webview.ZenithTabState.restore(
+                        view,
+                        context,
+                        tabId,
+                    )
+                    promise.resolve(restored)
+                } else if (attempt < 12) {
+                    attemptRestore(context, tabId, attempt + 1, promise)
+                } else {
+                    promise.resolve(false)
                 }
-                val restored = com.zenith.browser.webview.ZenithTabState.restore(view, context, tabId)
-                promise.resolve(restored)
             } catch (_: Throwable) {
                 promise.resolve(false)
             }
