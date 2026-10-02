@@ -104,7 +104,12 @@ Yang membuat sebuah aplikasi terasa seperti browser adalah sesi, profil, kembali
 
 Batasnya jujur: service worker ekstensi dan `webRequest` tidak berjalan. Content script berjalan.
 
-## Panduan desain (v0.6.0)
+## Panduan desain & rilis
+
+- **v0.7.0** — rekomendasi lanjutan §7 v0.6.0: keep-alive WebView, warna dinamis Material You, Snackbar "Urungkan", transisi emphasized, perbaikan skala huruf → [RELEASE-v0.7.0.md](RELEASE-v0.7.0.md)
+- **v0.6.0** — pemeriksaan silang panduan resmi Android (Material 3, WebView, edge-to-edge, aksesibilitas)
+
+### Catatan v0.6.0
 
 Antarmuka dan perilaku aplikasi mengikuti panduan resmi Android Developers:
 

@@ -132,6 +132,8 @@ export interface SiteConfig {
 
 export interface Settings {
   theme: 'dark' | 'light' | 'system';
+  /** Material You: warna peran mengikuti wallpaper (Android 12+). */
+  dynamicColor: boolean;
   barPosition: 'bottom' | 'top';
   showWorkspaceBar: boolean;
   defaultEngineId: string;

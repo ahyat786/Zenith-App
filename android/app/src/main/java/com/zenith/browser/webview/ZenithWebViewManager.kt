@@ -38,7 +38,7 @@ class ZenithWebViewManager : RNCWebViewManager() {
         private const val TAG_LAST_SOURCE_URI = 0x5e417010
         private const val TAG_CUSTOM_UA = 0x5e417011
         private const val TAG_APP_NAME_UA = 0x5e417012
-        private const val FALLBACK_APP_VERSION = "Zenith/0.6.0"
+        private const val FALLBACK_APP_VERSION = "Zenith/0.7.0"
     }
 
     override fun getName(): String = "RNCWebView"

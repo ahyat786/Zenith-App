@@ -132,7 +132,7 @@ export function Row({
         </View>
       ) : null}
       <View style={{ flex: 1 }}>
-        <Text numberOfLines={1} style={{ color: danger ? theme.danger : theme.text, ...type.bodyLarge }}>
+        <Text numberOfLines={2} style={{ color: danger ? theme.danger : theme.text, ...type.bodyLarge }}>
           {title}
         </Text>
         {subtitle ? (
@@ -486,7 +486,10 @@ export function Chip({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        height: sizes.chip,
+        // minHeight (bukan height) + padding vertikal: label tetap utuh saat
+        // pengguna memakai skala huruf besar (aksesibilitas 1,3–2,0).
+        minHeight: sizes.chip,
+        paddingVertical: 6,
         paddingHorizontal: 12,
         borderRadius: radius.sm,
         borderWidth: 1,

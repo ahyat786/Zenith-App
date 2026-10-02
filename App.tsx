@@ -18,6 +18,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StoreProvider, useStore } from './src/state/store';
 import { useTheme } from './src/theme';
 import { BrowserScreen } from './src/browser/BrowserScreen';
+import { SnackbarHost } from './src/ui/Snackbar';
+import { setDynamicColorEnabled } from './src/core/dynamicColor';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { ScriptsScreen } from './src/screens/ScriptsScreen';
 import { ExtensionsScreen } from './src/screens/ExtensionsScreen';
@@ -89,6 +91,15 @@ function AppShell() {
     return () => sub.remove();
   }, [dispatch]);
 
+  /**
+   * Warna dinamis Material You: izin dari setelan diteruskan ke jembatan
+   * palet (native DynamicColors → JS). Rujukan resmi:
+   * developer.android.com/develop/ui/views/theming/dynamic-colors
+   */
+  useEffect(() => {
+    setDynamicColorEnabled(state.settings.dynamicColor !== false);
+  }, [state.settings.dynamicColor]);
+
   if (!state.hydrated) {
     return (
       <View
@@ -127,6 +138,8 @@ function AppShell() {
       {state.ui.screen === 'bookmarks' ? <BookmarksScreen /> : null}
       {state.ui.screen === 'passwords' ? <PasswordsScreen /> : null}
       {state.ui.screen === 'account' ? <AccountScreen /> : null}
+      {/* Snackbar global — di atas semua layar, di bawah Modal (sheet/menu). */}
+      <SnackbarHost theme={theme} />
     </View>
   );
 }

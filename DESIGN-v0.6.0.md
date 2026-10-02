@@ -120,11 +120,14 @@ Sumber: <https://developer.android.com/develop/ui/views/layout/webapps/webview?h
 
 ---
 
-## 7. Rekomendasi lanjutan (belum dikerjakan)
+## 7. Rekomendasi lanjutan (status per v0.7.0)
 
-1. **`saveState()`/`restoreState()` per tab** — mempertahankan riwayat maju/mundur setelah proses aplikasi dibunuh (dokumen WebView menyarankan menyimpan state dengan hati-hati agar tidak melebihi batas Bundle).
-2. **Keep-alive 3 tab terakhir** — tab terakhir tetap ter-mount di belakang `display:none` (hemat muat ulang, tetap menaati panduan memori WebView).
-3. **Dynamic color Material You** — membaca palet wallpaper lewat native (`DynamicColors`) lalu mengirimkannya ke JS, sehingga tema mengikuti wallpaper seperti aplikasi Android modern.
-4. **Snackbar dengan aksi** (Material 3) sebagai pengganti sebagian `ToastAndroid`, mis. "Tab ditutup — Urungkan".
-5. **Animasi transisi M3** (emphasized easing) untuk sheet/dialog, dan transisi kartu tab masuk/keluar.
-6. **Skala huruf pengguna** — memastikan seluruh tata letak tetap utuh pada font scale 1,3–2,0 (aksesibilitas).
+Dikerjakan di rilis berikutnya — rinciannya di `RELEASE-v0.7.0.md`:
+
+1. ✅ **Keep-alive 3 tab terakhir** — diterapkan (`src/browser/keepAlive.ts`).
+2. ✅ **Dynamic color Material You** — diterapkan (`ZenithDynamicColor.kt` + `src/core/dynamicColor.ts`), dengan sakelar di Pengaturan.
+3. ✅ **Snackbar dengan aksi** (Material 3) — diterapkan (`src/ui/Snackbar.tsx`), dipakai pada "Situs desktop" dan "Warna dinamis" dengan aksi "Urungkan".
+4. ✅ **Animasi transisi M3** (emphasized) — overlay tab baru + Snackbar; sheet/dialog masih memakai animasi bawaan `Modal`.
+5. ✅ **Skala huruf pengguna 1,3–2,0** — perbaikan terarah pada Chip, judul baris daftar, dan tombol hapus omnibox (audit penuh belum).
+6. ⛔ **`saveState()`/`restoreState()` per tab** — belum; butuh penyimpanan state native per tab (batas `Bundle`/`TransactionTooLargeException`).
+7. ⛔ **Shields-sheet polish** — panel Shield Guard masih memakai ukuran huruf manual, belum type scale M3.

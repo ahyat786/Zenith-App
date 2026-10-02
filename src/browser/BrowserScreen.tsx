@@ -10,7 +10,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   BackHandler,
+  Easing,
   Pressable,
   ScrollView,
   Share,
@@ -23,7 +25,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hostOfUrl, isBookmarked, useStore } from '../state/store';
-import { elevation, radius, sizes, spacing, type as typeScale, useTheme } from '../theme';
+import { elevation, motion, radius, sizes, spacing, type as typeScale, useTheme } from '../theme';
 import { setBarsAppearance, setNightMode, useImeInset } from '../core/systemUi';
 import { TabView } from './TabView';
 import { Omnibox } from './Omnibox';
@@ -35,6 +37,7 @@ import { getWebView } from './refs';
 import { consumeHardwareBack, noteBackHandled, wasBackJustHandled } from './backStack';
 import { NEW_TAB_URL, isNewTabUrl } from './newtab';
 import { blankTabHeld, freshTabId, releaseBlankTab } from './navIntent';
+import { aliveWebViewIds } from './keepAlive';
 import { Icon } from '../ui/Icon';
 import {
   ActionSheet,
@@ -80,6 +83,39 @@ function formatDownloadSize(bytes: number): string {
   return ` (${bytes} B)`;
 }
 
+/**
+ * Transisi Material 3 (emphasized) untuk overlay tab baru: memudar sambil
+ * naik 8dp. Rujukan: developer.android.com/design/ui/mobile → Styles → Motion
+ * (durasi medium2, kurva emphasized).
+ */
+function NewTabOverlay({ children, bg }: { children: React.ReactNode; bg: string }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: motion.duration.medium2,
+      easing: Easing.bezier(...motion.easing.emphasized),
+      useNativeDriver: true,
+    }).start();
+  }, [anim]);
+  return (
+    <Animated.View
+      collapsable={false}
+      style={[
+        StyleSheet.absoluteFill,
+        {
+          backgroundColor: bg,
+          zIndex: 30,
+          elevation: 24,
+          opacity: anim,
+          transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+        },
+      ]}>
+      {children}
+    </Animated.View>
+  );
+}
+
 export function BrowserScreen() {
   const { state, fullState, dispatch, switchProfile, activeTab, tabsInWorkspace, openNewTab, siteConfigFor } = useStore();
   const theme = useTheme(state.settings.theme);
@@ -115,9 +151,13 @@ export function BrowserScreen() {
   const bookmark = activeTab ? isBookmarked(state, activeTab.url) : undefined;
   const host = activeTab ? hostOfUrl(activeTab.url) : '';
   const isDesktopMode = isDesktopUa(siteCfg?.userAgent);
+  /**
+   * Mode desktop per situs. Umpan baliknya kini Snackbar Material 3 dengan
+   * "Urungkan" di dalam menu (FirefoxMenu) — bukan ToastAndroid, karena
+   * Material 3 menganjurkan aksi yang bisa dibatalkan punya jalan pulang.
+   */
   const toggleDesktopMode = () => {
     if (!host || !activeTab) {
-      ToastAndroid.show('Buka situs dulu — mode desktop berlaku per situs', ToastAndroid.SHORT);
       return;
     }
     dispatch({
@@ -125,10 +165,6 @@ export function BrowserScreen() {
       host,
       patch: { userAgent: isDesktopMode ? '' : DESKTOP_UA },
     });
-    ToastAndroid.show(
-      isDesktopMode ? '📱 Mode mobile — memuat ulang…' : '🖥️ Mode desktop — memuat ulang…',
-      ToastAndroid.SHORT,
-    );
     setTimeout(() => {
       const wv = getWebView(activeTab.id);
       if (wv) {
@@ -715,16 +751,35 @@ export function BrowserScreen() {
 
   const empty = state.tabs.length === 0;
   const wsEmptyButTabsExist = !empty && wsTabs.length === 0;
+  /**
+   * WebView yang tetap hidup.
+   *
+   * Panduan memori WebView (developer.android.com/develop/ui/views/layout/
+   * webapps/webview → "Mengelola memori WebView") menganjurkan memakai ulang
+   * instance dan tidak menahan terlalu banyak sekaligus. Sebelumnya Zenith
+   * hanya menahan SATU WebView (tab aktif), sehingga setiap pindah tab
+   * memuat ulang halaman — lambat dan kehilangan posisi gulir.
+   *
+   * Sekarang: tab aktif + tab terakhir yang dipakai (LRU, maksimum 3)
+   * tetap ter-mount; sisanya dibuang (stopLoading + onPause di native).
+   * Tab yang tidak tampil disembunyikan (display:none) dan tidak menerima
+   * sentuhan karena berada di belakang lapisan aktif.
+   */
+  const mountedIds = useMemo(
+    () => aliveWebViewIds(fullState.tabs, state.activeTabId, state.splitTabIds),
+    [fullState.tabs, state.activeTabId, state.splitTabIds],
+  );
+
   const mountTabs = useMemo(() => {
     const pid = state.activeProfileId;
-    const mine = fullState.tabs.filter((t) => t.profileId === pid);
+    const mine = fullState.tabs.filter((t) => t.profileId === pid && !isNewTabUrl(t.url));
     // Tab baru tidak boleh menampilkan WebView tab atau profil lain.
-    // Satu WebView saja: tab lain tidak boleh menempel atau menyalin URL-nya.
     if (onNewTabPage) {
       return [];
     }
-    return mine.filter((t) => t.id === state.activeTabId && !isNewTabUrl(t.url));
-  }, [fullState.tabs, state.activeProfileId, state.activeTabId, onNewTabPage]);
+    // Urutan mengikuti daftar tab agar urutan child native stabil.
+    return mine.filter((t) => mountedIds.includes(t.id));
+  }, [fullState.tabs, state.activeProfileId, mountedIds, onNewTabPage]);
 
   // ---------- panel SHIELD GUARD (Brave + log koneksi) ----------
   const shieldsSheet = (
@@ -909,15 +964,12 @@ export function BrowserScreen() {
           .filter((t) => !(splitActive && splitIds.includes(t.id)))
           .map((t) => renderTab(t))}
         {onNewTabPage ? (
-          <View
-            collapsable={false}
-            style={[StyleSheet.absoluteFill, { backgroundColor: theme.bg, zIndex: 30, elevation: 24 }]}
-          >
+          <NewTabOverlay bg={theme.bg}>
             <NewTabPage
               theme={theme}
               tab={freshOpen ?? (activeTab && isNewTabUrl(activeTab.url) ? activeTab : null)}
             />
-          </View>
+          </NewTabOverlay>
         ) : null}
         {onNewTabPage ? null : empty ? (
           <View style={StyleSheet.absoluteFill}>

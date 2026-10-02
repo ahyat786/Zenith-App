@@ -41,6 +41,9 @@ export const DEFAULT_ENGINES: SearchEngine[] = [
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
+  // Material You aktif bila perangkat mendukung (Android 12+); tanpa
+  // dukungan, token warna Zenith sendiri yang dipakai.
+  dynamicColor: true,
   barPosition: 'bottom',
   showWorkspaceBar: true,
   defaultEngineId: 'google',

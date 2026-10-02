@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radius, sizes, type as typeScale, type Theme } from '../theme';
 import type { Extension } from '../types';
 import { Icon, type IconName } from '../ui/Icon';
+import { useSnackbar } from '../ui/Snackbar';
 import { useStore } from '../state/store';
 
 interface Props {
@@ -71,6 +72,9 @@ export function FirefoxMenu(props: Props) {
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
   // Permukaan M3: kartu = surface container, lembar = surface dengan bayangan.
+  // Snackbar Material 3 dipasang DI DALAM Modal ini supaya tetap terlihat
+  // saat menu terbuka (modal Android punya jendela sendiri).
+  const snack = useSnackbar(theme);
   const card = theme.surfaceContainer;
   const sheet = theme.surfaceContainerLow;
   const ink = theme.text;
@@ -214,7 +218,20 @@ export function FirefoxMenu(props: Props) {
               ) : null}
               <Hairline theme={theme} />
               <Pressable
-                onPress={props.onToggleDesktop}
+                onPress={() => {
+                  props.onToggleDesktop();
+                  /*
+                   * Material 3: tindakan yang mengubah keadaan diberi jalan
+                   * pulang lewat Snackbar + "Urungkan" — bukan toast sekilas.
+                   */
+                  snack.show({
+                    message: props.desktop
+                      ? 'Mode mobile untuk situs ini'
+                      : 'Mode desktop untuk situs ini — halaman dimuat ulang',
+                    actionLabel: 'Urungkan',
+                    onAction: props.onToggleDesktop,
+                  });
+                }}
                 disabled={!props.canPage}
                 style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 14, opacity: props.canPage ? 1 : 0.4 }}>
                 <Icon name="monitor" size={22} color={ink} />
@@ -373,6 +390,7 @@ export function FirefoxMenu(props: Props) {
           </ScrollView>
         </Animated.View>
       </View>
+      {snack.host}
     </Modal>
   );
 }

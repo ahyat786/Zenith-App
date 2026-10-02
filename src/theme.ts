@@ -20,6 +20,10 @@
  */
 
 import { useColorScheme } from 'react-native';
+import { useEffect, useMemo } from 'react';
+import { dynamicPatch, noteScheme, useDynamicRevision } from './core/dynamicColor';
+import { withAlpha } from './core/color';
+import { mergeDynamicTokens } from './core/dynamicTheme';
 
 export interface Theme {
   dark: boolean;
@@ -51,6 +55,8 @@ export interface Theme {
   scrim: string;
   inverseSurface: string;
   inverseOnSurface: string;
+  /** warna aksi di atas permukaan terbalik (Snackbar) */
+  inversePrimary: string;
 
   /* ---------- Nama lama (dipetakan ke peran di atas) ---------- */
   bg: string;
@@ -99,6 +105,7 @@ export const darkTheme: Theme = {
   scrim: 'rgba(0,0,0,0.60)',
   inverseSurface: '#E6E0E9',
   inverseOnSurface: '#322F35',
+  inversePrimary: '#6750A4',
 
   bg: '#141218',
   surface: '#211F26',
@@ -146,6 +153,7 @@ export const lightTheme: Theme = {
   scrim: 'rgba(0,0,0,0.32)',
   inverseSurface: '#322F35',
   inverseOnSurface: '#F5EFF7',
+  inversePrimary: '#D0BCFF',
 
   bg: '#FEF7FF',
   surface: '#F3EDF7',
@@ -166,23 +174,53 @@ export const lightTheme: Theme = {
 
 export type ThemePref = 'dark' | 'light' | 'system';
 
+/**
+ * Tema aktif. Bila "Warna dinamis (Material You)" menyala dan perangkat
+ * mendukungnya, peran warna dari wallpaper (dynamicColor.ts) menimpa token
+ * dasar — lihat developer.android.com/develop/ui/views/theming/dynamic-colors.
+ *
+ * Identitas objek tema dijaga stabil (cache per revisi palet) supaya
+ * `useMemo`/dependensi di seluruh aplikasi tidak ikut berubah tiap render.
+ */
 export function useTheme(pref: ThemePref): Theme {
   const scheme = useColorScheme();
   const light = pref === 'light' || (pref === 'system' && scheme === 'light');
-  return light ? lightTheme : darkTheme;
+  const mode: 'light' | 'dark' = light ? 'light' : 'dark';
+  const rev = useDynamicRevision();
+  useEffect(() => {
+    // Pastikan palet untuk mode yang sedang tampil sudah diambil.
+    noteScheme(mode);
+  }, [mode]);
+  return useMemo(
+    () => withDynamicTokens(light ? lightTheme : darkTheme, mode, rev),
+    [light, mode, rev],
+  );
 }
 
-/** Warna peran apa pun dengan opasitas alfa (0–1). */
-export function withAlpha(color: string, alpha: number): string {
-  const hex = color.trim();
-  if (!/^#[0-9a-f]{6}$/i.test(hex)) {
-    return color;
+const mergedCache: { light?: { rev: number; theme: Theme }; dark?: { rev: number; theme: Theme } } = {};
+
+/** Token dasar + palet wallpaper (bila ada). Alias lama ikut disesuaikan. */
+function withDynamicTokens(base: Theme, mode: 'light' | 'dark', rev: number): Theme {
+  const patch = dynamicPatch(mode);
+  if (!patch) {
+    return base;
   }
-  const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
-    .toString(16)
-    .padStart(2, '0');
-  return `${hex}${a}`;
+  const slot = mode === 'light' ? mergedCache.light : mergedCache.dark;
+  if (slot && slot.rev === rev) {
+    return slot.theme;
+  }
+  const merged: Theme = mergeDynamicTokens(base, patch, withAlpha);
+  const entry = { rev, theme: merged };
+  if (mode === 'light') {
+    mergedCache.light = entry;
+  } else {
+    mergedCache.dark = entry;
+  }
+  return merged;
 }
+
+/** Warna peran + opasitas alfa — lihat src/core/color.ts (murni, teruji). */
+export { withAlpha } from './core/color';
 
 /**
  * Lapisan status Material 3 — dipakai untuk ripple/tekanan.

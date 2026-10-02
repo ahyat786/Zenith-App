@@ -42,6 +42,7 @@ interface ZenithCoreNative {
   privateProfileSupported(): Promise<boolean>;
   clearPrivateSession(): Promise<boolean>;
   setActiveBrowserProfile(profileId: string): Promise<boolean>;
+  dynamicColors(mode: string): Promise<Record<string, string> | null>;
   readStateBackup(): Promise<string | null>;
   writeStateBackup(json: string): Promise<boolean>;
   flushCookies(): Promise<boolean>;
@@ -421,6 +422,21 @@ export async function coreVersion(): Promise<{ version: string; engine: string }
   try {
     const raw = await ZC?.coreVersion();
     return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Palet warna dinamis Material You dari wallpaper (Android 12+).
+ * Rujukan: developer.android.com/develop/ui/views/theming/dynamic-colors
+ * Mengembalikan null bila perangkat tidak mendukung — Zenith lalu memakai
+ * token warnanya sendiri (lihat src/core/dynamicColor.ts).
+ */
+export async function dynamicColors(mode: 'light' | 'dark'): Promise<Record<string, string> | null> {
+  try {
+    const raw = await ZC?.dynamicColors(mode);
+    return raw && typeof raw === 'object' ? raw : null;
   } catch {
     return null;
   }

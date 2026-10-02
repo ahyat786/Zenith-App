@@ -288,6 +288,25 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    /**
+     * Palet warna dinamis Material You (Android 12+) untuk mode terang/gelap.
+     * Rujukan: developer.android.com/develop/ui/views/theming/dynamic-colors
+     * Mengembalikan null bila perangkat/wallpaper tidak mendukung.
+     */
+    @ReactMethod
+    fun dynamicColors(mode: String, promise: Promise) {
+        try {
+            val map = ZenithDynamicColor.palette(reactApplicationContext, mode == "dark")
+            if (map == null) {
+                promise.resolve(null)
+            } else {
+                promise.resolve(map)
+            }
+        } catch (_: Throwable) {
+            promise.resolve(null)
+        }
+    }
+
     /** Mulai mengirim tinggi keyboard ke JS (event "ZenithImeInsets"). */
     @ReactMethod
     fun enableSystemUiTracking(promise: Promise) {

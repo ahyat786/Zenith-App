@@ -307,8 +307,13 @@ export function Omnibox({ theme }: { theme: Theme }) {
               onPress={() => setText('')}
               accessibilityRole="button"
               accessibilityLabel="Hapus teks"
-              android_ripple={{ color: theme.onSurface + '1f', borderless: true, radius: 20 }}
-              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+              android_ripple={{ color: theme.onSurface + '1f', borderless: true, radius: sizes.touchTarget / 2 }}
+              style={{
+                width: sizes.touchTarget,
+                height: sizes.touchTarget,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
               <Icon name="close" size={18} color={theme.subtext} />
             </Pressable>
           ) : null}

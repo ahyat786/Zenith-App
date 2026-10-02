@@ -82,8 +82,8 @@ android {
         applicationId "com.zenith.browser"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20
-        versionName "0.6.0"
+        versionCode 21
+        versionName "0.7.0"
     }
     signingConfigs {
         debug {
@@ -133,6 +133,11 @@ dependencies {
     //   · WebSettingsCompat.setSafeBrowsingEnabled (keamanan)
     // Direkomendasikan resmi di panduan WebView Android Developers.
     implementation("androidx.webkit:webkit:1.11.0")
+
+    // Material Components — dipakai untuk warna dinamis Material You
+    // (DynamicColors + MaterialColors). Rujukan resmi:
+    // developer.android.com/develop/ui/views/theming/dynamic-colors
+    implementation("com.google.android.material:material:1.12.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

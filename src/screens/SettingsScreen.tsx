@@ -12,6 +12,7 @@ import { SettingsHome, type SettingsPanel, type SettingsRow } from './SettingsHo
 import { useStore } from '../state/store';
 import { spacing, useTheme } from '../theme';
 import { ScreenShell } from '../ui/ScreenShell';
+import { showSnackbar } from '../ui/Snackbar';
 import {
   Button,
   IconButton,
@@ -176,7 +177,7 @@ export function SettingsScreen() {
   const engineName = s.engines.find((e) => e.id === s.defaultEngineId)?.name ?? 'Mesin pencari';
   const themeLabel = s.theme === 'dark' ? 'Gelap' : s.theme === 'light' ? 'Terang' : 'Mengikuti sistem';
   const settingsRows: SettingsRow[] = [
-    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.6.0 · Browser Cepat & Privat', screen: 'about' },
+    { id: 'tentang', title: 'Tentang Zenith', subtitle: 'v0.7.0 · Browser Cepat & Privat', screen: 'about' },
     { id: 'umum', title: 'Umum', subtitle: themeLabel, panel: 'tampilan' },
     { id: 'cari', title: 'Cari', subtitle: engineName, panel: 'cari' },
     { id: 'tab', title: 'Tab', subtitle: s.barPosition === 'top' ? 'Bar di atas' : 'Bar di bawah', panel: 'tab' },
@@ -249,6 +250,30 @@ export function SettingsScreen() {
             ]}
           />
         </View>
+        {/*
+          Warna dinamis Material You (Android 12+) — panduan resmi
+          developer.android.com/develop/ui/views/theming/dynamic-colors.
+          Perubahan diumumkan lewat Snackbar Material 3 dengan aksi "Urungkan".
+        */}
+        <ToggleRow
+          theme={theme}
+          icon="palette"
+          title="Warna dinamis (Material You)"
+          subtitle="Palet ikut warna wallpaper — Android 12+"
+          value={s.dynamicColor !== false}
+          onValueChange={(v) => {
+            dispatch({ type: 'SET_SETTINGS', patch: { dynamicColor: v } });
+            if (v) {
+              showSnackbar({ message: 'Warna dinamis aktif — palet dari wallpaper' });
+            } else {
+              showSnackbar({
+                message: 'Warna dinamis dimatikan — kembali ke warna Zenith',
+                actionLabel: 'Urungkan',
+                onAction: () => dispatch({ type: 'SET_SETTINGS', patch: { dynamicColor: true } }),
+              });
+            }
+          }}
+        />
         <View style={{ paddingHorizontal: spacing.md, paddingTop: 12 }}>
           <Text style={{ color: theme.subtext, fontSize: 12.5, fontWeight: '600', marginBottom: 6 }}>
             Posisi bar alat
