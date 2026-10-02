@@ -75,11 +75,19 @@ jobs:
       - name: Typecheck TypeScript
         run: npx tsc --noEmit
 
-      # Uji perilaku fitur v0.7.0 (keep-alive WebView, palet Material You,
-      # Snackbar, transisi & aksesibilitas) — modul murni dikompilasi lalu
-      # dijalankan, ditambah pemeriksaan wiring. Tanpa dependensi tambahan.
-      - name: Periksa fitur v0.7.0 (eval/check-v0.7.0.js)
-        run: node eval/check-v0.7.0.js
+      # Uji perilaku fitur per rilis (keep-alive WebView, palet Material You,
+      # Snackbar, histori tab, shields, aksesibilitas) — modul murni
+      # dikompilasi lalu dijalankan, ditambah pemeriksaan wiring.
+      # Tanpa dependensi tambahan: cukup `node`.
+      - name: Periksa fitur rilis (eval/check-v*.js)
+        run: |
+          status=0
+          for f in eval/check-v*.js; do
+            echo "::group::$f"
+            node "$f" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
 
       # Kunci rilis tersimpan di GitHub Secrets (terenkripsi, write-only).
       # Di-decode ke file sementara lalu dilewatkan ke Gradle via env.

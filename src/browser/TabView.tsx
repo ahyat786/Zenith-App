@@ -8,7 +8,7 @@
  *     Pembungkus idempoten mencegah skrip berjalan dua kali.
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, Text, View } from 'react-native';
 import { WebView as WebViewComponent, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
@@ -21,7 +21,8 @@ import type { Theme } from '../theme';
 import { useStore } from '../state/store';
 import { BRIDGE_SCRIPT, joinPayload } from '../core/inject';
 import { shieldBootScript } from '../core/shield';
-import { adblockShouldBlock } from '../core/native';
+import { adblockShouldBlock, restoreTabState, saveTabState } from '../core/native';
+import { RESTORE_PLACEHOLDER, restoreSourceUri, shouldAttemptRestore } from './tabRestore';
 import { DESKTOP_INJECT_SCRIPT, DESKTOP_UA, isDesktopUa } from '../core/desktop';
 import { planCached } from '../core/plan';
 import { webviewRefs } from './refs';
@@ -58,7 +59,48 @@ export function TabView({ tab, active, theme }: Props) {
    * sekarang lewat claimWebViewLoad + forceWebViewLoad saja.
    */
   const initialUrl = useRef<string>(pendingUrl || tab.url).current;
-  const source = useRef({ uri: initialUrl }).current;
+  /**
+   * Histori WebView per tab (saveState/restoreState — panduan resmi WebView).
+   *
+   * WebView pertama-tama dipasang dengan sumber "zenith:restoring" yang
+   * SENGAJA dilewati manager native (tidak ada pemuatan apa pun). Setelah
+   * view native terdaftar, kami minta native memulihkan histori tab ini:
+   *  · berhasil → sumber tetap "zenith:restored" (juga dilewati manager),
+   *    halaman hasil pemulihan dibiarkan hidup — tidak ada muat ulang;
+   *  · gagal / tidak ada state → sumber berganti ke URL tab seperti biasa.
+   *
+   * Navigasi baru (URL diketik, tautan diklik) selalu menang: bila ada
+   * pemuatan yang sudah diklaim, pemulihan tidak dijalankan sama sekali.
+   */
+  const [sourceUri, setSourceUri] = useState<string>(RESTORE_PLACEHOLDER);
+  const restoreDone = useRef(false);
+  useEffect(() => {
+    if (restoreDone.current) {
+      return;
+    }
+    restoreDone.current = true;
+    if (!shouldAttemptRestore(pendingNavigationUrl(tab.id), tab.id)) {
+      // Pengguna sudah meminta halaman lain — jangan pulihkan histori lama.
+      setSourceUri(restoreSourceUri(false, initialUrl));
+      return;
+    }
+    let alive = true;
+    (async () => {
+      const restored = await restoreTabState(tab.id);
+      if (!alive) {
+        return;
+      }
+      setSourceUri(restoreSourceUri(restored, initialUrl));
+    })();
+    return () => {
+      alive = false;
+    };
+    // sekali per tab: id tab tidak berubah selama komponen ini hidup
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab.id]);
+
+  const source = useRef({ uri: RESTORE_PLACEHOLDER }).current;
+  source.uri = sourceUri;
   const lastHistoryUrl = useRef<string>('');
   const injectGen = useRef(0);
   const loadedOnce = useRef(false);
@@ -137,6 +179,10 @@ export function TabView({ tab, active, theme }: Props) {
           clearTimeout(timer);
         }
         timer = setTimeout(recoverIfBlank, 450);
+      } else {
+        // Aplikasi ke latar: simpan histori WebView tab ini selagi hidup.
+        // (Proses bisa dibunuh kapan saja sesudah ini.)
+        void saveTabState(tab.id);
       }
     });
     return () => {
@@ -145,7 +191,9 @@ export function TabView({ tab, active, theme }: Props) {
       }
       sub.remove();
     };
-  }, [recoverIfBlank]);
+    // tab.id dipakai di dalam listener (saveTabState) — ikut jadi dependensi
+    // supaya histori tab yang benar yang disimpan bila tab berpindah.
+  }, [recoverIfBlank, tab.id]);
 
   useEffect(() => {
     return () => cancelBlankProbe(tab.id);
@@ -431,7 +479,7 @@ export function TabView({ tab, active, theme }: Props) {
         incognito={tab.incognito}
         thirdPartyCookiesEnabled={!tab.incognito}
         userAgent={desktop ? DESKTOP_UA : siteCfg?.userAgent || undefined}
-        applicationNameForUserAgent={`Zenith/0.7.0 zp:${tab.profileId || 'profile-utama'}`}
+        applicationNameForUserAgent={`Zenith/0.8.0 zp:${tab.profileId || 'profile-utama'} zt:${tab.id}`}
         scalesPageToFit={desktop || undefined}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}

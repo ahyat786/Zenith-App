@@ -245,13 +245,27 @@ group('4. Gerak Material 3 & aksesibilitas');
 // ------------------------------------------------------- 5. versi rilis
 group('5. Versi & berkas rilis');
 {
+  // Fitur-fitur di atas TIDAK boleh hilang saat versi naik, jadi versi
+  // dibandingkan (>= 0.7.0), bukan dicocokkan persis.
+  const cmp = (a, b) => {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < 3; i += 1) {
+      if ((pa[i] || 0) !== (pb[i] || 0)) {
+        return (pa[i] || 0) - (pb[i] || 0);
+      }
+    }
+    return 0;
+  };
   const gradle = read('android/app/build.gradle');
-  ok('versionName 0.7.0', /versionName "0\.7\.0"/.test(gradle));
-  ok('versionCode 21 (naik dari 20)', /versionCode 21/.test(gradle));
+  const version = (/versionName "(\d+\.\d+\.\d+)"/.exec(gradle) || [])[1] || '0.0.0';
+  ok('versionName >= 0.7.0', cmp(version, '0.7.0') >= 0, `versi: ${version}`);
+  const code = Number((/versionCode (\d+)/.exec(gradle) || [])[1] || 0);
+  ok('versionCode > 20', code > 20, `versionCode: ${code}`);
   const about = read('src/screens/AboutScreen.tsx');
-  ok('AboutScreen menampilkan v0.7.0', /v0\.7\.0/.test(about));
+  ok(`AboutScreen menampilkan v${version}`, about.includes(`v${version}`));
   const ua = read('src/browser/TabView.tsx');
-  ok('UA aplikasi menyebut Zenith/0.7.0', /Zenith\/0\.7\.0 zp:/.test(ua));
+  ok('UA aplikasi menyebut versi rilis', ua.includes(`Zenith/${version}`));
   ok('dokumen rilis v0.7.0 ada', fs.existsSync(path.join(ROOT, 'RELEASE-v0.7.0.md')));
 }
 

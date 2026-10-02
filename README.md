@@ -106,6 +106,7 @@ Batasnya jujur: service worker ekstensi dan `webRequest` tidak berjalan. Content
 
 ## Panduan desain & rilis
 
+- **v0.8.0** — histori WebView per tab (`saveState`/`restoreState`), panel Shield Guard Material 3, perbaikan skala huruf → [RELEASE-v0.8.0.md](RELEASE-v0.8.0.md)
 - **v0.7.0** — rekomendasi lanjutan §7 v0.6.0: keep-alive WebView, warna dinamis Material You, Snackbar "Urungkan", transisi emphasized, perbaikan skala huruf → [RELEASE-v0.7.0.md](RELEASE-v0.7.0.md)
 - **v0.6.0** — pemeriksaan silang panduan resmi Android (Material 3, WebView, edge-to-edge, aksesibilitas)
 

@@ -40,7 +40,7 @@ import {
   uid,
   workspacesForProfile,
 } from './defaults';
-import { flushCookies, readStateBackup, restoreCookieSnapshot, restorePrimaryCookies, setActiveBrowserProfile, snapshotCookies, writeStateBackup } from '../core/native';
+import { deleteTabState, flushCookies, readStateBackup, restoreCookieSnapshot, restorePrimaryCookies, setActiveBrowserProfile, snapshotCookies, writeStateBackup } from '../core/native';
 import { adblockAllowHost, adblockInit, adblockSetEnabled, expandSearch, normalizeInput } from '../core/native';
 import { setFastDownloadsEnabled } from '../core/downloads';
 import { isNewTabUrl } from '../browser/newtab';
@@ -336,6 +336,8 @@ function reducer(state: AppState, action: Action): AppState {
         return state;
       }
       const tabs = state.tabs.filter((t) => t.id !== action.id);
+      // Tab ditutup → state historinya tidak perlu disimpan lagi.
+      void deleteTabState(action.id);
       const splitTabIds = state.splitTabIds.filter((id) => id !== action.id);
       let activeTabId = state.activeTabId;
       if (state.activeTabId === action.id) {

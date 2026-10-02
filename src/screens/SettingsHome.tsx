@@ -55,11 +55,14 @@ export function SettingsHome({
             autoCapitalize="none"
             autoCorrect={false}
             style={{
-              backgroundColor: theme.surface,
-              color: theme.text,
+              backgroundColor: theme.surfaceContainerHigh,
+              color: theme.onSurface,
               borderRadius: 12,
               paddingHorizontal: 14,
-              height: 44,
+              // minHeight (bukan height): kolom tetap 48dp untuk jari, tetapi
+              // tidak memotong teks saat pengguna memakai skala huruf besar.
+              minHeight: 48,
+              paddingVertical: 8,
               fontSize: 15,
             }}
           />

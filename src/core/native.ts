@@ -43,6 +43,9 @@ interface ZenithCoreNative {
   clearPrivateSession(): Promise<boolean>;
   setActiveBrowserProfile(profileId: string): Promise<boolean>;
   dynamicColors(mode: string): Promise<Record<string, string> | null>;
+  saveTabState(tabId: string): Promise<boolean>;
+  restoreTabState(tabId: string): Promise<boolean>;
+  deleteTabState(tabId: string): Promise<boolean>;
   readStateBackup(): Promise<string | null>;
   writeStateBackup(json: string): Promise<boolean>;
   flushCookies(): Promise<boolean>;
@@ -439,5 +442,36 @@ export async function dynamicColors(mode: 'light' | 'dark'): Promise<Record<stri
     return raw && typeof raw === 'object' ? raw : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Histori WebView per tab (saveState/restoreState).
+ * Rujukan: developer.android.com/develop/ui/views/layout/webapps/webview
+ *  → "Mempertahankan riwayat": simpan state sebelum WebView dilepas, pulihkan
+ *    saat tab dibuka kembali. Bila modul native tidak ada, semua fungsi ini
+ *    mengembalikan false dan Zenith berjalan seperti sebelumnya.
+ */
+export async function saveTabState(tabId: string): Promise<boolean> {
+  try {
+    return (await ZC?.saveTabState(tabId)) === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function restoreTabState(tabId: string): Promise<boolean> {
+  try {
+    return (await ZC?.restoreTabState(tabId)) === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteTabState(tabId: string): Promise<boolean> {
+  try {
+    return (await ZC?.deleteTabState(tabId)) === true;
+  } catch {
+    return false;
   }
 }

@@ -784,23 +784,45 @@ export function BrowserScreen() {
   // ---------- panel SHIELD GUARD (Brave + log koneksi) ----------
   const shieldsSheet = (
     <Sheet visible={shieldsOpen} onClose={() => setShieldsOpen(false)} title={`Shield Guard — ${host || 'tak ada situs'}`} theme={theme}>
-      <View style={{ paddingHorizontal: spacing.lg, paddingTop: 6 }}>
+      {/* Kartu ringkasan M3: angka besar (headlineSmall) + keterangan
+          (bodyMedium). Ukuran memakai type scale, bukan px manual, supaya
+          tetap proporsional saat pengguna memperbesar huruf. */}
+      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm }}>
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: theme.accentSoft,
-            borderRadius: radius.md,
+            backgroundColor: theme.secondaryContainer,
+            borderRadius: radius.lg,
             padding: spacing.md,
-            marginBottom: 6,
+            marginBottom: spacing.sm,
           }}>
-          <Icon name="shield" size={26} color={theme.accent} />
-          <View style={{ marginLeft: 12, flex: 1 }}>
-            <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800' }}>
-              {stats ? stats.blockedCount.toLocaleString('id-ID') : '—'} permintaan diblokir
+          <View
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: radius.pill,
+              backgroundColor: theme.surfaceContainerHighest,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+            <Icon name="shield" size={26} color={theme.primary} />
+          </View>
+          <View style={{ marginLeft: spacing.md, flex: 1 }}>
+            <Text
+              accessibilityLabel={
+                stats
+                  ? `${stats.blockedCount.toLocaleString('id-ID')} permintaan diblokir di sesi ini`
+                  : 'Statistik belum siap'
+              }
+              style={{ color: theme.onSecondaryContainer, ...typeScale.headlineSmall }}>
+              {stats ? stats.blockedCount.toLocaleString('id-ID') : '—'}
             </Text>
-            <Text style={{ color: theme.subtext, fontSize: 12.5, marginTop: 2 }}>
-              iklan & pelacak di sesi ini • {stats ? stats.hosts.toLocaleString('id-ID') : '—'} host di daftar blokir
+            <Text style={{ color: theme.onSecondaryContainer, ...typeScale.bodyMedium, marginTop: 1 }}>
+              Permintaan diblokir di sesi ini
+            </Text>
+            <Text style={{ color: theme.subtext, ...typeScale.labelMedium, marginTop: 2 }}>
+              {stats ? stats.hosts.toLocaleString('id-ID') : '—'} host di daftar blokir
             </Text>
           </View>
         </View>
@@ -809,44 +831,52 @@ export function BrowserScreen() {
       {/* ---------- LOG KONEKSI (hostname) ---------- */}
       <View style={{ paddingHorizontal: spacing.lg, paddingBottom: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-          <Icon name="zap" size={14} color={theme.subtext} />
+          <Icon name="zap" size={16} color={theme.onSurfaceVariant} />
           <Text
             style={{
-              color: theme.subtext,
-              fontSize: 12,
-              fontWeight: '700',
+              color: theme.onSurfaceVariant,
+              ...typeScale.titleSmall,
               textTransform: 'uppercase',
               letterSpacing: 0.6,
-              marginLeft: 6,
+              marginLeft: spacing.sm,
               flex: 1,
             }}>
-            Connection log — {connLog.length ? `${connLog.length} terakhir` : 'menunggu permintaan'}
+            Log koneksi — {connLog.length ? `${connLog.length} terakhir` : 'menunggu permintaan'}
           </Text>
           {connLog.length > 0 ? (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Bersihkan log koneksi"
+              android_ripple={{ color: theme.onSurface + '1f', borderless: false, radius: radius.sm }}
               onPress={async () => {
                 await adblockClearConnectionLog();
                 setConnLog([]);
               }}
-              hitSlop={8}
-              style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: theme.surface2 }}>
-              <Text style={{ color: theme.subtext, fontSize: 11.5, fontWeight: '700' }}>Bersihkan</Text>
+              style={{
+                minHeight: 32,
+                justifyContent: 'center',
+                paddingHorizontal: spacing.sm,
+                borderRadius: radius.sm,
+                backgroundColor: theme.surfaceContainerHigh,
+              }}>
+              <Text style={{ color: theme.onSurfaceVariant, ...typeScale.labelMedium }}>Bersihkan</Text>
             </Pressable>
           ) : null}
         </View>
         {connLog.length === 0 ? (
-          <Text style={{ color: theme.subtext, fontSize: 12.5, paddingBottom: 6 }}>
+          <Text style={{ color: theme.onSurfaceVariant, ...typeScale.bodySmall, paddingBottom: spacing.sm }}>
             Buka halaman apa pun — hostname setiap permintaan muncul di sini lengkap dengan statusnya.
           </Text>
         ) : (
           <View
             style={{
-              backgroundColor: theme.surface,
+              backgroundColor: theme.surfaceContainer,
               borderRadius: radius.md,
               borderWidth: StyleSheet.hairlineWidth,
-              borderColor: theme.border,
-              paddingVertical: 4,
-              marginBottom: 4,
+              borderColor: theme.outlineVariant,
+              paddingVertical: spacing.xs,
+              marginBottom: spacing.xs,
+              overflow: 'hidden',
             }}>
             {connLog.slice(0, 12).map((e, i) => (
               <View
@@ -854,28 +884,35 @@ export function BrowserScreen() {
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
+                  minHeight: 36,
+                  paddingHorizontal: spacing.sm,
+                  paddingVertical: 4,
                 }}>
                 <View
                   style={{
                     width: 8,
                     height: 8,
                     borderRadius: 4,
-                    marginRight: 8,
-                    backgroundColor: e.blocked ? theme.danger : e.main ? theme.accent : theme.ok,
+                    marginRight: spacing.sm,
+                    backgroundColor: e.blocked ? theme.danger : e.main ? theme.primary : theme.ok,
                   }}
                 />
-                <Text numberOfLines={1} style={{ color: theme.text, fontSize: 12.5, fontWeight: '600', flex: 1 }}>
+                <Text numberOfLines={1} style={{ color: theme.onSurface, ...typeScale.bodySmall, flex: 1 }}>
                   {e.host}
                 </Text>
-                <Text style={{ color: theme.subtext, fontSize: 11, marginLeft: 8 }}>
-                  {e.main ? 'halaman' : e.blocked ? '⛔ diblokir' : 'lolos'}
+                <Text style={{ color: theme.onSurfaceVariant, ...typeScale.labelSmall, marginLeft: spacing.sm }}>
+                  {e.main ? 'halaman' : e.blocked ? 'diblokir' : 'lolos'}
                 </Text>
               </View>
             ))}
             {connLog.length > 12 ? (
-              <Text style={{ color: theme.subtext, fontSize: 11, textAlign: 'center', paddingVertical: 4 }}>
+              <Text
+                style={{
+                  color: theme.onSurfaceVariant,
+                  ...typeScale.labelSmall,
+                  textAlign: 'center',
+                  paddingVertical: spacing.xs,
+                }}>
                 +{connLog.length - 12} lainnya
               </Text>
             ) : null}

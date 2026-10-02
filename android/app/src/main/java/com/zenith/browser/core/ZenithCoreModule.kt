@@ -1,6 +1,8 @@
 package com.zenith.browser.core
 
 import android.content.ComponentName
+import android.os.Handler
+import android.os.Looper
 import android.content.Intent
 import android.provider.Settings
 import android.view.View
@@ -282,6 +284,83 @@ class ZenithCoreModule(reactContext: ReactApplicationContext) :
                 else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
             }
             AppCompatDelegate.setDefaultNightMode(resolved)
+            promise.resolve(true)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    /**
+     * Simpan histori WebView tab ini (saveState) — dipanggil saat aplikasi ke
+     * latar. Panduan resmi: developer.android.com/develop/ui/views/layout/
+     * webapps/webview ("Mempertahankan riwayat").
+     */
+    @ReactMethod
+    fun saveTabState(tabId: String, promise: Promise) {
+        Handler(Looper.getMainLooper()).post {
+            try {
+                val view = com.zenith.browser.webview.ZenithTabState.findWebView(tabId)
+                val saved = view != null &&
+                    com.zenith.browser.webview.ZenithTabState.saveFor(
+                        view,
+                        reactApplicationContext,
+                        tabId,
+                    )
+                promise.resolve(saved)
+            } catch (_: Throwable) {
+                promise.resolve(false)
+            }
+        }
+    }
+
+    /**
+     * Pulihkan histori WebView tab ini (restoreState) saat tab dibuka kembali
+     * atau aplikasi dimulai ulang setelah prosesnya dibunuh.
+     *
+     * View native baru terdaftar beberapa milidetik setelah komit React, jadi
+     * pencarian diulang beberapa kali sebelum menyerah (JS lalu memuat URL
+     * seperti biasa — tidak ada halaman yang gagal tampil).
+     */
+    @ReactMethod
+    fun restoreTabState(tabId: String, promise: Promise) {
+        val context = reactApplicationContext
+        if (!com.zenith.browser.webview.ZenithTabState.hasState(context, tabId)) {
+            promise.resolve(false)
+            return
+        }
+        attemptRestore(context, tabId, 0, promise)
+    }
+
+    private fun attemptRestore(
+        context: ReactApplicationContext,
+        tabId: String,
+        attempt: Int,
+        promise: Promise,
+    ) {
+        Handler(Looper.getMainLooper()).postDelayed({
+            try {
+                val view = com.zenith.browser.webview.ZenithTabState.findWebView(tabId)
+                if (view == null) {
+                    if (attempt < 12) {
+                        attemptRestore(context, tabId, attempt + 1, promise)
+                    } else {
+                        promise.resolve(false)
+                    }
+                    return
+                }
+                val restored = com.zenith.browser.webview.ZenithTabState.restore(view, context, tabId)
+                promise.resolve(restored)
+            } catch (_: Throwable) {
+                promise.resolve(false)
+            }
+        }, if (attempt == 0) 0L else 60L)
+    }
+
+    /** Hapus state tab yang sudah ditutup (tidak menumpuk di penyimpanan). */
+    @ReactMethod
+    fun deleteTabState(tabId: String, promise: Promise) {
+        try {
+            com.zenith.browser.webview.ZenithTabState.delete(reactApplicationContext, tabId)
             promise.resolve(true)
         } catch (_: Throwable) {
             promise.resolve(false)

@@ -38,7 +38,10 @@ class ZenithWebViewManager : RNCWebViewManager() {
         private const val TAG_LAST_SOURCE_URI = 0x5e417010
         private const val TAG_CUSTOM_UA = 0x5e417011
         private const val TAG_APP_NAME_UA = 0x5e417012
-        private const val FALLBACK_APP_VERSION = "Zenith/0.7.0"
+        private const val FALLBACK_APP_VERSION = "Zenith/0.8.0"
+        private val REGEX_MARKER = Regex("\\s(?:zp|zt):")
+        private val REGEX_PROFILE = Regex("zp:([^\\s]+)")
+        private val REGEX_TAB = Regex("zt:([^\\s]+)")
     }
 
     override fun getName(): String = "RNCWebView"
@@ -124,14 +127,17 @@ class ZenithWebViewManager : RNCWebViewManager() {
      */
     override fun setApplicationNameForUserAgent(view: RNCWebViewWrapper, value: String?) {
         val raw = value ?: ""
-        val marker = " zp:"
-        val idx = raw.lastIndexOf(marker)
-        if (idx >= 0) {
-            ZenithPrivate.noteProfile(view.webView, raw.substring(idx + marker.length).trim())
-            val ua = raw.substring(0, idx).trim()
-            view.webView.setTag(TAG_APP_NAME_UA, if (ua.isEmpty()) FALLBACK_APP_VERSION else ua)
-        } else {
-            view.webView.setTag(TAG_APP_NAME_UA, value?.takeIf { it.isNotBlank() })
+        // Penanda: " zp:<profileId>" (toples kuki) dan " zt:<tabId>"
+        // (histori saveState/restoreState per tab). Nama aplikasi = teks
+        // sebelum penanda pertama.
+        val firstMarker = REGEX_MARKER.find(raw)?.range?.first
+        val base = if (firstMarker != null) raw.substring(0, firstMarker).trim() else raw.trim()
+        view.webView.setTag(TAG_APP_NAME_UA, base.ifEmpty { FALLBACK_APP_VERSION })
+        REGEX_PROFILE.find(raw)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }?.let {
+            ZenithPrivate.noteProfile(view.webView, it)
+        }
+        REGEX_TAB.find(raw)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }?.let {
+            ZenithTabState.noteTab(view.webView, it)
         }
         applyUserAgent(view)
     }
@@ -204,6 +210,9 @@ class ZenithWebViewManager : RNCWebViewManager() {
 
     override fun onDropViewInstance(view: RNCWebViewWrapper) {
         try {
+            // Simpan histori tab ini sebelum WebView dilepas, supaya pindah
+            // tab / buka ulang tidak mengulang dari nol (saveState resmi).
+            ZenithTabState.save(view.webView, view.webView.context.applicationContext ?: view.webView.context)
             view.webView.stopLoading()
             view.webView.onPause()
         } catch (_: Throwable) {

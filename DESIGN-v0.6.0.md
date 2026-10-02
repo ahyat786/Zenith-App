@@ -128,6 +128,6 @@ Dikerjakan di rilis berikutnya — rinciannya di `RELEASE-v0.7.0.md`:
 2. ✅ **Dynamic color Material You** — diterapkan (`ZenithDynamicColor.kt` + `src/core/dynamicColor.ts`), dengan sakelar di Pengaturan.
 3. ✅ **Snackbar dengan aksi** (Material 3) — diterapkan (`src/ui/Snackbar.tsx`), dipakai pada "Situs desktop" dan "Warna dinamis" dengan aksi "Urungkan".
 4. ✅ **Animasi transisi M3** (emphasized) — overlay tab baru + Snackbar; sheet/dialog masih memakai animasi bawaan `Modal`.
-5. ✅ **Skala huruf pengguna 1,3–2,0** — perbaikan terarah pada Chip, judul baris daftar, dan tombol hapus omnibox (audit penuh belum).
-6. ⛔ **`saveState()`/`restoreState()` per tab** — belum; butuh penyimpanan state native per tab (batas `Bundle`/`TransactionTooLargeException`).
-7. ⛔ **Shields-sheet polish** — panel Shield Guard masih memakai ukuran huruf manual, belum type scale M3.
+5. 🟡 **Skala huruf pengguna 1,3–2,0** — masalah struktural (tinggi tetap pada wadah teks) diperbaiki; konversi literal `fontSize` menyeluruh masih bertahap (lihat `RELEASE-v0.8.0.md` §4).
+6. ✅ **`saveState()`/`restoreState()` per tab** — diterapkan di v0.8.0 (`ZenithTabState.kt` + `src/browser/tabRestore.ts`).
+7. ✅ **Shields-sheet polish** — panel Shield Guard memakai type scale M3 sejak v0.8.0.
